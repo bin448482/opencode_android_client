@@ -71,7 +71,8 @@
     <string name="sessions_no_archived">No archived sessions</string>
     <string name="sessions_expand">Expand %1$s</string>
     <string name="sessions_collapse">Collapse %1$s</string>
-    <string name="chat_model_fallback">Model</string>
+    <string name="chat_model_server_default">Server default</string>
+    <string name="chat_model_server_default_detail">Do not specify a model</string>
     <string name="chat_switch_model">Switch LLM model</string>
     <string name="chat_todo">Todo</string>
     <string name="chat_context">Context</string>

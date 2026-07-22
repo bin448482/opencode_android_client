@@ -4,14 +4,14 @@ internal object ModelSelectionMigration {
     const val CURRENT_SCHEMA_VERSION = 2
 
     private val legacyReferences = listOf(
-        null,
+        "zai-coding-plan/glm-5.2",
         "openai/gpt-5.6-sol",
-        null,
+        "google/gemini-3.5-flash",
         "ds4/deepseek-v4-flash",
         "deepseek/deepseek-v4-pro",
-        null,
-        null,
-        null,
+        "ollama-cloud/glm-5.2",
+        "openai/gpt-5.6-sol-pro",
+        "openai/gpt-5.6-sol-fast",
     )
 
     fun referenceForLegacyIndex(index: Int): String? = legacyReferences.getOrNull(index)

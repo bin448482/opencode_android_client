@@ -1,6 +1,6 @@
 # 个人需求文档：Android 客户端界面定制
 
-> 状态：客户端实现与离线验证已完成；服务端端到端验收待执行
+> 状态：客户端实现、离线验证和本机服务目录端到端验证已完成；实际远端服务的消息提交验收待执行
 > 创建日期：2026-07-22
 > 适用分支：`personal-ui`
 > 范围：OpenCode Android Client（个人 fork）
@@ -67,88 +67,13 @@
 
 ### 2.4 聊天窗口模型下拉列表调整
 
-当前模型预置列表位于 `ModelPresets.kt`：
+模型菜单不再来自客户端预设。客户端在连接当前 host profile 后读取 `GET /config/providers`，将每个 provider 的 `models` 映射扁平化为可选项：`providerID` / `providerId` 存在时优先使用，否则使用父 provider ID；`model.id` 为空时才使用 models map key。显示名称优先使用服务端 `name`，并始终显示精确 `providerId/modelId`。
 
-```kotlin
-object ModelPresets {
-    val list: List<AppState.ModelOption> = listOf(
-        AppState.ModelOption("GLM-5.2", "zai-coding-plan", "glm-5.2"),
-        AppState.ModelOption("GPT-5.6 Sol", "openai", "gpt-5.6-sol"),
-        AppState.ModelOption("Gemini 3.5 Flash", "google", "gemini-3.5-flash"),
-        AppState.ModelOption("DeepSeek Local", "ds4", "deepseek-v4-flash"),
-        AppState.ModelOption("DeepSeek V4 Pro", "deepseek", "deepseek-v4-pro"),
-        AppState.ModelOption("Ollama GLM 5.2", "ollama-cloud", "glm-5.2"),
-        AppState.ModelOption("GPT-5.6 Sol Pro", "openai", "gpt-5.6-sol-pro"),
-        AppState.ModelOption("GPT-5.6 Sol Fast", "openai", "gpt-5.6-sol-fast"),
-    )
-}
-```
+因此 GLM、Gemini、DeepSeek、GPT、Kimi 等都不再由 Android 代码按名称隐藏或添加。服务端返回的有效模型都会显示；服务端未返回或缺少有效请求标识的项不会被猜测或伪造。
 
-#### 2.4.1 移除指定模型
+菜单首项固定为“服务端默认（不指定模型）”。选择它会清除全局和当前会话的显式引用，使 `PromptRequest.model` 为 `null`，由 OpenCode Server 决定实际模型。`default` 响应字段允许多个 provider 默认值，客户端不将其中任一项硬编码为唯一全局默认。
 
-从下拉列表中移除以下模型（不删除代码，可通过注释或条件过滤实现）：
-
-| 显示名称 | Provider ID | Model ID | 移除原因 |
-|---------|------------|----------|---------|
-| Gemini 3.5 Flash | `google` | `gemini-3.5-flash` | 按需求移除 |
-| Ollama GLM 5.2 | `ollama-cloud` | `glm-5.2` | 按需求移除 |
-| GLM-5.2 | `zai-coding-plan` | `glm-5.2` | 按需求移除 |
-
-#### 2.4.2 添加 Kimi K3
-
-新增模型的合同已完成目录级验证：
-
-| 显示名称 | Provider ID | Model ID | 验证依据 |
-|---------|-------------|----------|----------|
-| Kimi K3 | `kimi-for-coding` | `k3` | OpenCode 使用的 Models.dev 当前将 `k3` 登记在 `kimi-for-coding` provider 下，底层模型为 `moonshotai/kimi-k3`。 |
-
-因此 Android 预置项应为：
-
-```kotlin
-AppState.ModelOption("Kimi K3", "kimi-for-coding", "k3")
-```
-
-**不得使用** `ollama-cloud/kimi-k3`、`moonshot/kimi-k3`、`kimi/k3` 或其他占位值。客户端会把 `providerID` 和 `modelID` 原样提交给 OpenCode Server；未注册组合必须被视为不可用，而不是先写入 UI 后再尝试。
-
-**服务端配置前提**
-
-本机已存在 `kimi-for-coding` 认证记录，但 OpenCode 的全局配置尚未设置默认模型。应在运行 `opencode serve` 的主机上，将以下字段合并到全局 `opencode.json` 中，保留已有的 `mcp` 等配置，不得覆盖整个文件：
-
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "model": "kimi-for-coding/k3"
-}
-```
-
-Windows 的全局配置位置为 `%USERPROFILE%\.config\opencode\opencode.json`。认证与模型配置是两件事：认证凭据由 `opencode providers login`（或 TUI 的 `/connect`）管理，`model` 指定默认的 `provider/model` 组合。
-
-**运行时验收**
-
-在实际供 Android App 连接的服务器上：
-
-1. 执行 `opencode models kimi-for-coding --refresh`，确认列表包含 `k3`。
-2. 启动 `opencode serve --port 4096` 后，调用 `GET /config/providers`，确认返回中存在 `providerID = kimi-for-coding` 与 `modelID = k3`。
-3. 仅在以上两项都通过后，将 Kimi K3 放入 Android 的 `ModelPresets`，并用 App 创建会话、发送一条非敏感测试消息验证端到端请求。
-
-#### 2.4.3 GPT-5.6 Sol 配置结论
-
-当前 OpenCode Models.dev 注册的基础模型是：
-
-| 显示名称 | Provider ID | Model ID | 状态 |
-|---------|-------------|----------|------|
-| GPT-5.6 Sol | `openai` | `gpt-5.6-sol` | 有效基础模型 |
-
-`gpt-5.6-sol-pro` 与 `gpt-5.6-sol-fast` **不是独立模型 ID**，不得继续作为 `ModelPresets` 中的 `modelId`。`gpt-5.6-sol` 的 `medium`、`high` 等属于 reasoning variant；`pro`、`fast` 属于该基础模型的模式配置，而不是可通过改显示名称获得的模型。
-
-现有 Android 请求合同仅发送 `providerID` 与 `modelID`，未发送 OpenCode variant 或 mode。因此本次个人 UI 定制中：
-
-- GPT 下拉列表最多保留一个 `GPT-5.6 Sol / openai / gpt-5.6-sol` 条目。
-- 不将 `Medium`、`High`、`Fast`、`Pro` 作为独立 GPT 模型展示。
-- 不需要为本次变更修改 `ModelOption.shortName` 的 GPT 专用映射；其通用 `GPT` 回退显示已足够。
-- 若未来确实需要切换 reasoning variant 或 experimental mode，必须先冻结移动端 REST 请求合同、扩展 `ModelOption` 与 `PromptRequest`、补充序列化和端到端测试；这不是本需求中的“改显示名称”。
-
-OpenAI 目前未在本机认证记录中出现。因此即使 Android 保留上述基础模型，也只能在运行服务端完成 OpenAI 认证、`/config/providers` 返回该模型后才可显示或验收。
+历史引用仍按 `providerId/modelId` 保存。当前服务器不提供已保存引用时，客户端不替换或删除该引用；本次 Prompt 省略模型并在顶栏显示“服务端默认”，切回提供该引用的服务器后可继续使用。模型变体/推理强度仍不由移动端另建字段，除非服务端将其作为独立 model ID 返回。
 
 ## 3. 建议的 feature flag 设计
 
@@ -175,51 +100,43 @@ private const val SHOW_VOICE_INPUT = false
 |------|---------|
 | Settings UI | 隐藏语音识别、NFC 实验功能两个区块 |
 | Chat Input UI | 隐藏 VoiceRail（麦克风、波形、转写状态） |
-| Model Selector | 移除指定预置项、添加已验证的 Kimi K3；GPT 仅保留有效基础模型 |
-| 模型选择持久化 | 预置列表重排后迁移或重置全局与会话级模型下标 |
-| Tests | 更新相关 UI 测试、`ModelTests` 与模型下标迁移测试 |
+| Model Selector | 展示当前 OpenCode Server 返回的完整有效模型目录和“服务端默认”项 |
+| 模型选择持久化 | 以 `providerId/modelId` 保存显式选择；默认项不保存引用 |
+| Tests | 覆盖目录扁平化、ID 别名/回退、失效引用和默认选择 |
 
 ### 4.2 模型下标迁移要求
 
-`SettingsManager` 与会话偏好当前保存的是模型**下标**，不是 `providerId/modelId`。删除或重排 `ModelPresets` 后，旧下标可能指向错误模型。
-
-实施时必须在同一次变更中完成以下之一：
-
-- 将已有下标映射到新的等价 `providerId/modelId`；或
-- 清除旧的全局和会话级模型下标，并设置一个经过服务端验证的默认模型。
-
-不得只依赖现有的越界裁剪逻辑；它只能处理超出范围，不能识别“同一数值已指向另一模型”。
+`SettingsManager` 与会话偏好使用模型**引用**而非下标：`selected_model_ref` 和 `session_model_refs` 均保存 `providerId/modelId`。schema 1 的旧下标只映射到其原始引用，绝不按当前菜单位置解释；最终能否随 Prompt 发送由当前服务器目录决定。
 
 ### 4.3 验证清单
 
 - [x] Settings 页面不显示“语音识别”区块。
 - [x] Settings 页面不显示“NFC Quick Prompt”区块。
 - [x] Chat 页面不显示 VoiceRail（麦克风、波形、转写状态）。
-- [x] 下拉列表中不显示 Gemini、Ollama GLM、GLM-5.2。
-- [ ] 在服务端 `/config/providers` 已确认的前提下，下拉列表显示 Kimi K3（`kimi-for-coding/k3`）。
-- [x] 若 OpenAI 未在服务端返回，不显示 GPT-5.6 Sol；若已返回，则只显示一个 `openai/gpt-5.6-sol` 条目。
-- [x] 预置列表变更后，历史会话不会因旧下标被静默切换到其他模型。
-- [ ] 选择 Kimi K3 后能正常发送消息并收到回复。
+- [x] 下拉列表显示服务端返回的全部有效模型，而不是个人白名单。
+- [x] 菜单首项“服务端默认”会发送不含 `model` 的 Prompt。
+- [x] 预置列表移除后，历史会话不会因菜单重排被静默切换到其他模型。
+- [ ] 在实际 Android Server 上，确认目录与 `/config/providers` 一致，并选择服务端实际返回的模型发送非敏感消息。
 - [x] 相关离线单元测试通过。
-- [ ] UI/instrumented 测试仅在模拟器运行，尚未执行。
+- [x] 模型菜单 Compose/instrumented 测试已在 `Pixel_6` 模拟器执行：验证“服务端默认”及 32 个动态模型的滚动与选择。
 
 ## 5. 实施结果与服务端验收
 
-1. **已完成客户端改动**：文件内常量默认隐藏语音、NFC 和 VoiceRail；静态白名单、引用式迁移和服务端交集均已由离线单元测试覆盖。
-2. **已确认 CLI 模型目录**：`opencode models kimi-for-coding --refresh` 返回 `kimi-for-coding/k3`。
-3. **待完成服务端验收**：在 Android App 实际连接的 OpenCode Server 上验证 `/config/providers`，仅当它返回对应 `providerId/modelId` 时模型才会显示。
-4. **待完成模拟器端到端验证**：仅在模拟器和显式指定的测试服务器上，分别选择每个可见模型并收发一条非敏感测试消息。
+1. **已完成客户端改动**：文件内常量默认隐藏语音、NFC 和 VoiceRail；模型菜单按服务端目录动态生成，引用式选择和默认回退均有离线测试。
+2. **已确认接口行为**：本机临时 OpenCode Server 的 `/config/providers` 返回 provider/models 目录与 provider 默认映射；`Pixel_6` 模拟器经 `adb reverse` 的真实 HTTP 测试确认，客户端目录的去重引用集合与该响应完全一致。这不是手机远端服务器的替代证明。
+3. **待完成服务端验收**：在 Android App 实际连接的 OpenCode Server 上确认下拉目录与接口响应一致。
+4. **待完成模拟器端到端验证**：仅在模拟器和显式指定的测试服务器上，选择“服务端默认”和实际目录模型各发送一条非敏感消息。
 
 ## 6. 已确认事项与剩余问题
 
-1. **Kimi K3 合同已确认**：`kimi-for-coding/k3`。剩余的是运行该 Android App 所连接服务器的实际可用性验收。
-2. **GPT 三档 UI 不属于本次范围**：现有客户端不支持变体/模式选择；基础模型 `openai/gpt-5.6-sol` 是否可显示取决于服务端的 OpenAI 认证与返回。
+1. **模型目录合同已确认**：以当前 OpenCode Server 的 `/config/providers` 为唯一运行时权威。
+2. **变体与模式 UI 不属于本次范围**：移动端不新增变体/模式字段；服务器将其作为独立 model ID 返回时会自然显示。
 3. 是否需要保留一个“恢复默认”的开关，以临时打开语音或实验功能？
 4. 若未来引入模型 variant/mode，是否需要将模型选择持久化从下标迁移为 `providerId/modelId/variant` 结构？
 
 ## 7. 推荐下一步
 
-在运行 OpenCode Server 的主机上启动实际服务，检查 `/config/providers` 是否返回 `kimi-for-coding/k3` 与已认证的 OpenAI 模型；随后仅用模拟器完成端到端消息验收。客户端不会在该接口缺失模型时显示或发送该模型。
+在运行 OpenCode Server 的主机上启动实际服务，保存 `/config/providers` 的非敏感目录摘要，并在模拟器中确认该目录完整出现；分别验证“服务端默认”和任意实际返回模型的消息记录。
 
 ---
 
@@ -227,13 +144,13 @@ private const val SHOW_VOICE_INPUT = false
 
 ### A.1 客户端与服务端的职责
 
-Android Client 的模型菜单来自 `ModelPresets.kt`，不会依据服务端列表动态生成。客户端会请求 `GET /config/providers` 用于服务端 provider/model 元数据，但发送消息时仍由预置项决定 `providerID` 和 `modelID`。
+Android Client 的模型菜单直接由 `GET /config/providers` 动态生成。客户端将每个有效 provider/model 项的精确标识原样用于 Prompt；不使用固定预置或名称猜测。
 
 因此：
 
-- `/config/providers` 是“当前 Android 要连接的服务端”是否允许某个预置项的运行时权威。
-- `ModelPresets.kt` 是 Android UI 的静态白名单。
-- 两者必须取交集；服务端未返回的预置项不得显示为可用。
+- `/config/providers` 是“当前 Android 要连接的服务端”的模型目录运行时权威。
+- `providers[].models` 中每个具备有效 `providerId/modelId` 的项都会显示；接口未返回或标识不完整的项不会显示。
+- “服务端默认”不指定模型，`default` 映射仅说明各 provider 的默认项，不能被客户端推断为唯一全局默认。
 - `GET /provider` 可用于诊断 provider 总览，但不能替代 `/config/providers` 对当前服务端配置的确认。
 
 ### A.2 OpenCode 配置层级
@@ -249,18 +166,16 @@ OpenCode 支持 JSON/JSONC 配置，并按远端组织配置、全局配置、�
 
 `model` 的格式固定为 `provider_id/model_id`。认证凭据不应写入项目仓库或 Android 客户端；使用 OpenCode 的 provider 登录流程保存到本机认证存储。
 
-### A.3 已验证的模型合同
+### A.3 运行时模型合同
 
 | 用途 | Provider ID | Model ID | 备注 |
 |------|-------------|----------|------|
-| Kimi K3 | `kimi-for-coding` | `k3` | 当前 Models.dev 的 Kimi For Coding provider 已登记该模型。 |
-| GPT-5.6 Sol 基础模型 | `openai` | `gpt-5.6-sol` | reasoning variant 和 experimental mode 不是独立的 model ID。 |
+| 显式模型选择 | `ProviderModel.providerID/providerId`，否则父 provider ID | `ProviderModel.id`，否则 models map key | 仅使用当前接口项的精确标识。 |
+| 服务端默认 | 不发送 | 不发送 | `PromptRequest.model == null`，由服务器决定实际模型。 |
 
 ### A.4 变体与模式边界
 
-OpenCode 将 reasoning variant 作为基础模型的运行配置。例如 `gpt-5.6-sol` 可使用 `medium` 或 `high` reasoning effort；这与另一个 `modelID` 不同。现有 Android `PromptRequest` 没有 variant/mode 字段，所以不能把这些配置伪装成 `gpt-5.6-sol-medium`、`gpt-5.6-sol-pro` 或 `gpt-5.6-sol-fast`。
-
-新增该能力时，必须先定义移动端请求字段、服务端兼容版本、持久化格式、回退语义和测试，再修改 UI。
+现有 Android `PromptRequest` 只发送 provider/model，不新增 variant 或 mode 字段。服务端若将某种运行配置以独立 model ID 发布，客户端会将其作为普通目录项显示；否则配置仍完全由服务端处理。
 
 ---
 
@@ -268,7 +183,6 @@ OpenCode 将 reasoning variant 作为基础模型的运行配置。例如 `gpt-5
 
 **本仓库**
 
-- `app/src/main/java/com/yage/opencode_client/ui/ModelPresets.kt`
 - `app/src/main/java/com/yage/opencode_client/ui/MainViewModel.kt`
 - `app/src/main/java/com/yage/opencode_client/ui/MainViewModelSessionActions.kt`
 - `app/src/main/java/com/yage/opencode_client/data/api/OpenCodeApi.kt`

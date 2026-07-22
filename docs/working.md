@@ -1,5 +1,12 @@
 # OpenCode Android 客户端工作日志
 
+## 2026-07-22 — 服务端模型目录
+
+- 删除静态 `ModelPresets` 白名单；聊天模型菜单直接展示当前 OpenCode Server `GET /config/providers` 中的全部有效 provider/model 项。
+- 显式模型按服务端返回的精确 `providerId/modelId` 提交；“服务端默认”清除显式引用并发送不含 `model` 的 Prompt。接口 `default` 映射可含多个 provider 默认，客户端不推断唯一全局默认。
+- 已保存但当前目录不可用的引用不改写；当前请求回退到服务端默认，切回原服务器后可恢复。旧下标迁移仍映射到原始引用，不按新目录顺序解释。
+- 验证：`./gradlew.bat testDebugUnitTest` 通过；`ChatTopBarInstrumentedTest` 已在 `Pixel_6` 模拟器通过，覆盖服务端默认、32 个目录项滚动和精确引用选择。`OpenCodeIntegrationTest` 已通过 `adb reverse` 桥接模拟器到本机临时 OpenCode Server：健康、agent 和 `/config/providers` 的去重模型集合均与 `AppState.availableModels` 一致；会话测试因未提供凭据按预期跳过。实际远端服务的消息提交验收仍需在不使用物理设备的前提下执行。
+
 ## 2026-06-30 — NFC Quick Prompt (Experimental)
 
 ### 目标
@@ -501,8 +508,8 @@ iOS/Android feature parity 调研完成，确认以下体验层差异需要对�
 - 改动文件：`SettingsManager.kt`（新增 get/setDraftText）、`MainViewModel.kt`（selectSession 时保存/恢复）、`MainViewModelSessionActions.kt`
 
 **5.4 Model/Agent 按 Session 记忆**
-- 当前实现：模型选择以 `providerId/modelId` 引用而非 `selectedModelIndex` 保存，避免白名单重排或服务器切换导致静默改选模型。
-- 目标：按 sessionID 在 EncryptedSharedPreferences 中保存规范模型引用；恢复项仍须通过静态白名单和当前服务器模型交集验证，缺失时不伪造替代模型。
+- 当时实现：模型选择以 `providerId/modelId` 引用而非 `selectedModelIndex` 保存，避免白名单重排或服务器切换导致静默改选模型。
+- 后续替代：2026-07-22 起模型目录改为完全由服务端返回，缺失引用不伪造替代模型。
 - 改动文件：`SettingsManager.kt`（模型引用读写与 schema 2 迁移）、`ModelSelectionMigration.kt`、`MainViewModel.kt`（验证后写入）、`MainViewModelSessionActions.kt`（恢复与请求边界）。
 
 **文档更新**：PRD v1.1、RFC §4.3/§4.4/§5.4 已更新

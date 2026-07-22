@@ -1,11 +1,13 @@
 package com.yage.opencode_client
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -193,8 +195,8 @@ class ChatInputBarInstrumentedTest {
         }
 
         composeRule.onNodeWithText("Agent running").assertIsDisplayed()
-        composeRule.onNodeWithText("Agent running · Transcribing").assertDoesNotExist()
-        composeRule.onNodeWithText("Stop transcription wait").assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("Tap to speak").assertDoesNotExist()
+        composeRule.onAllNodesWithText("Agent running · Transcribing").assertCountEquals(0)
+        composeRule.onAllNodesWithText("Stop transcription wait").assertCountEquals(0)
+        composeRule.onAllNodesWithContentDescription("Tap to speak").assertCountEquals(0)
     }
 }

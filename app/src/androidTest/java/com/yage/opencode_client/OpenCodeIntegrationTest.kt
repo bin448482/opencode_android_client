@@ -3,6 +3,7 @@ package com.yage.opencode_client
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.yage.opencode_client.data.repository.OpenCodeRepository
+import com.yage.opencode_client.ui.AppState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
@@ -76,5 +77,27 @@ class OpenCodeIntegrationTest {
         assertTrue("Get agents failed: ${result.exceptionOrNull()}", result.isSuccess)
         val agents = result.getOrThrow()
         assertNotNull(agents)
+    }
+
+    @Test
+    fun getProviders_exposesEveryValidRuntimeModel() = runBlocking {
+        val result = repository.getProviders()
+        assertTrue("Get providers failed: ${result.exceptionOrNull()}", result.isSuccess)
+
+        val providers = result.getOrThrow()
+        val expectedReferences = providers.providers.flatMap { provider ->
+            provider.models.mapNotNull { (modelKey, model) ->
+                val providerId = model.resolvedProviderId?.takeIf { it.isNotBlank() }
+                    ?: provider.id.takeIf { it.isNotBlank() }
+                val modelId = model.id.takeIf { it.isNotBlank() }
+                    ?: modelKey.takeIf { it.isNotBlank() }
+                if (providerId == null || modelId == null) null else "$providerId/$modelId"
+            }
+        }.toSet()
+
+        assertTrue("Expected the server to publish at least one valid model", expectedReferences.isNotEmpty())
+        val actualReferences = AppState(providers = providers).availableModels.map { it.reference }
+        assertEquals(expectedReferences, actualReferences.toSet())
+        assertEquals("The client must not show the same server model twice", actualReferences.size, actualReferences.toSet().size)
     }
 }

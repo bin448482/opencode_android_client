@@ -1,6 +1,8 @@
 package com.yage.opencode_client.ui.chat
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -59,7 +61,6 @@ import com.yage.opencode_client.data.model.Session
 import com.yage.opencode_client.data.model.SessionStatus
 import com.yage.opencode_client.data.model.TodoItem
 import com.yage.opencode_client.ui.AppState
-import com.yage.opencode_client.ui.ModelPresets
 import com.yage.opencode_client.ui.session.SessionList
 import com.yage.opencode_client.ui.theme.BrandGold
 import java.util.Locale
@@ -98,6 +99,7 @@ internal data class ChatTopBarActions(
     val onRefreshSessions: () -> Unit = {},
     val onToggleSessionExpanded: (String) -> Unit = {},
     val onSelectModel: (AppState.ModelOption) -> Unit,
+    val onSelectServerDefault: () -> Unit,
     val onOpenAIUsage: () -> Unit = {},
     val onRefreshAIUsage: () -> Unit = {},
     val onNavigateToSettings: () -> Unit = {},
@@ -114,9 +116,7 @@ internal fun ChatTopBar(
     val currentSession = state.sessions.find { it.id == state.currentSessionId }
     var showSessionSheet by remember { mutableStateOf(false) }
     var showModelMenu by remember { mutableStateOf(false) }
-    val selectedModel = state.availableModels.firstOrNull {
-        ModelPresets.reference(it) == state.selectedModelReference
-    }
+    val selectedModel = state.availableModels.firstOrNull { it.reference == state.selectedModelReference }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showTodoDialog by remember { mutableStateOf(false) }
     var showContextDialog by remember { mutableStateOf(false) }
@@ -211,6 +211,7 @@ internal fun ChatTopBar(
                     Box(modifier = Modifier.weight(1f, fill = false)) {
                         Surface(
                             onClick = { showModelMenu = true },
+                            modifier = Modifier.testTag("chat.model_selector"),
                             shape = RoundedCornerShape(50),
                             color = Color.Transparent,
                             border = BorderStroke(
@@ -223,7 +224,7 @@ internal fun ChatTopBar(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = selectedModel?.shortName ?: stringResource(R.string.chat_model_fallback),
+                                    text = selectedModel?.displayName ?: stringResource(R.string.chat_model_server_default),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
@@ -241,33 +242,72 @@ internal fun ChatTopBar(
                             expanded = showModelMenu,
                             onDismissRequest = { showModelMenu = false }
                         ) {
-                            if (state.availableModels.isEmpty()) {
+                            Column(
+                                modifier = Modifier
+                                    .heightIn(max = 360.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .testTag("chat.model_menu")
+                            ) {
                                 DropdownMenuItem(
+                                    modifier = Modifier.testTag("chat.model_server_default"),
                                     text = {
-                                        Text(
-                                            stringResource(R.string.sessions_no_models),
-                                            color = MaterialTheme.colorScheme.outline
-                                        )
-                                    },
-                                    onClick = { }
-                                )
-                            }
-                            state.availableModels.forEach { model ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            model.displayName,
-                                            color = if (model == selectedModel)
-                                                MaterialTheme.colorScheme.primary
-                                            else
-                                                MaterialTheme.colorScheme.onSurface
-                                        )
+                                        Column {
+                                            Text(
+                                                stringResource(R.string.chat_model_server_default),
+                                                color = if (selectedModel == null)
+                                                    MaterialTheme.colorScheme.primary
+                                                else
+                                                    MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                stringResource(R.string.chat_model_server_default_detail),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
                                     },
                                     onClick = {
-                                        actions.onSelectModel(model)
+                                        actions.onSelectServerDefault()
                                         showModelMenu = false
                                     }
                                 )
+                                HorizontalDivider()
+                                if (state.availableModels.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(R.string.sessions_no_models),
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        },
+                                        onClick = { }
+                                    )
+                                }
+                                state.availableModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        modifier = Modifier.testTag("chat.model.${model.reference}"),
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    model.displayName,
+                                                    color = if (model == selectedModel)
+                                                        MaterialTheme.colorScheme.primary
+                                                    else
+                                                        MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    model.reference,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            actions.onSelectModel(model)
+                                            showModelMenu = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }

@@ -95,20 +95,7 @@ data class AppState(
 ) {
     data class NfcPendingAction(val prompt: String, val autoSend: Boolean)
     data class ModelOption(val displayName: String, val providerId: String, val modelId: String) {
-        val shortName: String
-            get() = when {
-                displayName == "DeepSeek V4 Flash" -> "DS-Flash"
-                displayName == "DeepSeek Local" -> "DS-L"
-                displayName == "DeepSeek V4 Pro" -> "DS-Pro"
-                displayName == "Ollama GLM 5.2" -> "OGLM-5.2"
-                displayName == "GPT-5.6 Sol Pro" -> "GPT-P"
-                displayName == "GPT-5.6 Sol Fast" -> "GPT-F"
-                "Haiku" in displayName -> "Haiku"
-                "Gemini" in displayName -> "Gemini"
-                "GPT" in displayName -> "GPT"
-                "Grok" in displayName -> "Grok"
-                else -> displayName.split(" ").firstOrNull() ?: displayName
-            }
+        val reference: String get() = "$providerId/$modelId"
     }
 
     data class ContextUsage(
@@ -280,24 +267,32 @@ data class AppState(
     val visibleAgents: List<AgentInfo>
         get() = agents.filter { it.isVisible }
 
-    /** Curated model list validated against the connected OpenCode Server. */
+    /** Every valid model published by the connected OpenCode Server. */
     val availableModels: List<ModelOption>
         get() {
             val serverProviders = providers?.providers ?: return emptyList()
-            return ModelPresets.list.filter { preset ->
-                serverProviders.any { provider ->
-                    provider.models.any { (modelKey, model) ->
-                        val providerMatches = provider.id == preset.providerId ||
-                            model.resolvedProviderId == preset.providerId
-                        val modelMatches = modelKey == preset.modelId || model.id == preset.modelId
-                        providerMatches && modelMatches
+            return serverProviders.flatMap { provider ->
+                provider.models.mapNotNull { (modelKey, model) ->
+                    val providerId = model.resolvedProviderId?.takeIf { it.isNotBlank() }
+                        ?: provider.id.takeIf { it.isNotBlank() }
+                    val modelId = model.id.takeIf { it.isNotBlank() }
+                        ?: modelKey.takeIf { it.isNotBlank() }
+                    if (providerId == null || modelId == null) {
+                        null
+                    } else {
+                        ModelOption(
+                            displayName = model.name?.takeIf { it.isNotBlank() } ?: modelId,
+                            providerId = providerId,
+                            modelId = modelId
+                        )
                     }
                 }
-            }
+            }.distinctBy { it.reference }
+                .sortedWith(compareBy<ModelOption> { it.providerId }.thenBy { it.displayName }.thenBy { it.modelId })
         }
 
     val selectedModel: ModelOption?
-        get() = availableModels.firstOrNull { ModelPresets.reference(it) == selectedModelReference }
+        get() = availableModels.firstOrNull { it.reference == selectedModelReference }
 
     val selectedAIUsageQuota: AIUsageQuota?
         get() {
@@ -1111,15 +1106,22 @@ class MainViewModel @Inject constructor(
     }
 
     fun selectModel(model: AppState.ModelOption) {
-        val reference = ModelPresets.reference(model)
         val selected = _state.value.availableModels.firstOrNull {
-            ModelPresets.reference(it) == reference
+            it.reference == model.reference
         } ?: return
-        val selectedReference = ModelPresets.reference(selected)
+        val selectedReference = selected.reference
         settingsManager.selectedModelReference = selectedReference
         _state.update { it.copy(selectedModelReference = selectedReference) }
         _state.value.currentSessionId?.let {
             settingsManager.setModelReferenceForSession(it, selectedReference)
+        }
+    }
+
+    fun selectServerDefault() {
+        settingsManager.selectedModelReference = null
+        _state.update { it.copy(selectedModelReference = null) }
+        _state.value.currentSessionId?.let {
+            settingsManager.setModelReferenceForSession(it, null)
         }
     }
 

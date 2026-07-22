@@ -10,18 +10,19 @@
 
 ## 模型选择合同
 
-- `ui/ModelPresets.kt` 保留个人预置定义，并只将四个可见候选提供给 UI：`openai/gpt-5.6-sol`、`ds4/deepseek-v4-flash`、`deepseek/deepseek-v4-pro`、`kimi-for-coding/k3`。
-- `util/ModelSelectionMigration.kt` 固化旧八项下标到 schema 2 引用的迁移表；不要从当前可见列表的顺序推导旧值。
-- `AppState.availableModels` 取该静态白名单与服务端 `GET /config/providers` 的交集；响应缺失或加载失败时列表为空。
-- 选择和会话偏好使用 `providerId/modelId` 规范引用。`SettingsManager` 在首次启动时将旧整数下标迁移至 schema 2，不能再按重排后的列表位置解释旧值。
-- 若当前服务器不提供已保存的引用，提示请求不得伪造另一模型；请求不带显式模型，由服务器默认值处理。
+- `AppState.availableModels` 直接扁平化当前服务器 `GET /config/providers` 的有效 models 映射；不得按模型名称或个人预置进行隐藏、添加或猜测。请求 ID 优先取 model 的 `providerID/providerId` 与 `id`，为空才分别回退到父 provider ID 与 models map key。
+- 聊天菜单首项“服务端默认”表示 Prompt 不含 `model`；`default` 响应映射可含多个 provider 默认值，不能被移动端当作唯一全局默认。每个显式项显示服务端名称和规范 `providerId/modelId`。
+- 选择和会话偏好使用 `providerId/modelId` 规范引用。`SettingsManager` 在首次启动时将旧整数下标迁移至 schema 2 的原始引用，不能再按当前目录顺序解释旧值。
+- 若当前服务器不提供已保存的引用，提示请求不得伪造或改写另一模型；保存值保留，本次请求不带显式模型并显示“服务端默认”。
 
 ## 运行与验证
 
 - 离线单元测试：`./gradlew testDebugUnitTest`。
 - 覆盖率：`./gradlew koverHtmlReport`。
 - 仪器测试：仅在模拟器上显式执行 `./gradlew connectedDebugAndroidTest`；不得安装或启动物理设备上的调试包。
-- 服务器端模型验收依次检查 `opencode models kimi-for-coding --refresh` 与实际服务器的 `GET /config/providers`；不要用 Android App 代替服务端合同验证。
+- `ChatTopBarInstrumentedTest` 在模拟器上验证“服务端默认”操作和长模型目录滚动；筛选单个类时使用 `-Pandroid.testInstrumentationRunnerArguments.class=<fully-qualified-class>`，`connectedDebugAndroidTest` 不支持 JVM 的 `--tests` 参数。
+- `OpenCodeIntegrationTest` 从根目录 `.env` 的 `OPENCODE_SERVER_URL` 读取服务端；无 URL 或健康检查失败时跳过。其目录断言比较去重后的引用集合，验证客户端不因展示排序而遗漏或重复服务端模型；目录、健康和 agent 检查不需要会话凭据。
+- 服务器端模型验收以实际服务器的 `GET /config/providers` 为准；不要用 Android App 或本机模型目录代替远端服务合同验证。
 - `AIUsageClientTest` 的 `MockWebServer` 必须绑定回环地址并使用 `127.0.0.1` 请求，以便私有 HTTP 策略测试不继承运行环境的主机别名。
 
 修改模型合同、持久化键、UI 可见性或测试入口时，必须在同一次变更中更新本文件及受影响子目录说明。

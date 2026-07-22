@@ -1,7 +1,6 @@
 package com.yage.opencode_client
 
 import com.yage.opencode_client.ui.AppState
-import com.yage.opencode_client.ui.ModelPresets
 import com.yage.opencode_client.data.model.*
 import com.yage.opencode_client.util.ThemeMode
 import org.junit.Assert.*
@@ -153,46 +152,64 @@ class AppStateTest {
     }
 
     @Test
-    fun `availableModels returns only curated models confirmed by the server`() {
+    fun `availableModels returns every valid model published by the server`() {
         val state = AppState(
             providers = makeProviders(
                 Triple("openai", "gpt-5.6-sol", "GPT-5.6 Sol"),
                 Triple("ds4", "deepseek-v4-flash", "DeepSeek Local"),
                 Triple("deepseek", "deepseek-v4-pro", "DeepSeek V4 Pro"),
                 Triple("kimi-for-coding", "k3", "Kimi K3"),
-                Triple("openai", "unlisted-model", "Unlisted")
+                Triple("openai", "gpt-5.6-terra-fast", "GPT-5.6 Terra Fast")
             )
         )
 
-        assertEquals(ModelPresets.list, state.availableModels)
         assertEquals(
-            listOf("openai/gpt-5.6-sol", "ds4/deepseek-v4-flash", "deepseek/deepseek-v4-pro", "kimi-for-coding/k3"),
-            state.availableModels.map { ModelPresets.reference(it) }
+            listOf(
+                "deepseek/deepseek-v4-pro",
+                "ds4/deepseek-v4-flash",
+                "kimi-for-coding/k3",
+                "openai/gpt-5.6-sol",
+                "openai/gpt-5.6-terra-fast"
+            ),
+            state.availableModels.map { it.reference }
         )
     }
 
     @Test
-    fun `availableModels is empty until the server confirms a matching model`() {
-        val unavailable = AppState(providers = makeProviders(Triple("openai", "gpt-4", "GPT-4")))
+    fun `availableModels is empty only until the server responds`() {
+        val published = AppState(providers = makeProviders(Triple("openai", "gpt-4", "GPT-4")))
 
         assertTrue(AppState().availableModels.isEmpty())
-        assertTrue(unavailable.availableModels.isEmpty())
+        assertEquals(listOf("openai/gpt-4"), published.availableModels.map { it.reference })
     }
 
     @Test
-    fun `availableModels accepts the server model provider ID alias`() {
+    fun `availableModels resolves aliases falls back to map key and ignores invalid models`() {
         val state = AppState(
             providers = ProvidersResponse(
                 providers = listOf(
                     ConfigProvider(
                         id = "catalog",
-                        models = mapOf("k3" to ProviderModel(id = "k3", providerId = "kimi-for-coding"))
+                        models = linkedMapOf(
+                            "terra-key" to ProviderModel(id = "gpt-5.6-terra-fast", name = "GPT-5.6 Terra Fast", providerId = "openai"),
+                            "fallback-key" to ProviderModel(id = "", name = null),
+                            "" to ProviderModel(id = "", name = "Invalid")
+                        )
+                    ),
+                    ConfigProvider(
+                        id = "openai",
+                        models = mapOf("duplicate" to ProviderModel(id = "gpt-5.6-terra-fast", name = "Duplicate"))
                     )
-                )
+                ),
+                defaultByProvider = mapOf("catalog" to "fallback-key", "openai" to "gpt-5.6-terra-fast")
             )
         )
 
-        assertEquals(ModelPresets.findByReference("kimi-for-coding/k3"), state.availableModels.single())
+        assertEquals(
+            listOf("catalog/fallback-key", "openai/gpt-5.6-terra-fast"),
+            state.availableModels.map { it.reference }
+        )
+        assertEquals("fallback-key", state.availableModels.first().displayName)
     }
 
     private fun makeContextUsageState(

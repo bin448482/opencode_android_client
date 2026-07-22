@@ -178,22 +178,15 @@ internal fun launchLoadMessages(
             .onSuccess { messages ->
                 if (sessionId == state.value.currentSessionId) {
                     val lastAssistant = messages.lastOrNull { it.info.isAssistant }
-                    val inferredModelReference = lastAssistant?.info?.resolvedModel?.let { model ->
-                        ModelPresets.list.firstOrNull {
-                            it.providerId == model.providerId && it.modelId == model.modelId
-                        }?.let { ModelPresets.reference(it) }
-                    }
                     val inferredAgentName = lastAssistant?.info?.agent
                     val persistedModelReference = settingsManager?.getModelReferenceForSession(sessionId)
-                        ?.takeIf { ModelPresets.findByReference(it) != null }
-                    val modelReference = persistedModelReference ?: inferredModelReference
                     val agentName = settingsManager?.getAgentForSession(sessionId) ?: inferredAgentName
                     state.update {
                         it.copy(
                             messages = messages,
                             messageLimit = limit,
                             isLoadingMessages = false,
-                            selectedModelReference = modelReference ?: it.selectedModelReference,
+                            selectedModelReference = persistedModelReference ?: it.selectedModelReference,
                             selectedAgentName = agentName ?: it.selectedAgentName
                         )
                     }

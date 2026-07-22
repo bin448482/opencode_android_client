@@ -22,7 +22,6 @@ import com.yage.opencode_client.ssh.SSHKeyManager
 import com.yage.opencode_client.ssh.TunnelManager
 import com.yage.opencode_client.ui.AppState
 import com.yage.opencode_client.ui.MainViewModel
-import com.yage.opencode_client.ui.ModelPresets
 import com.yage.opencode_client.ui.buildSelectedModel
 import com.yage.opencode_client.ui.session.buildSessionTree
 import com.yage.opencode_client.util.SettingsManager
@@ -196,7 +195,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `sendMessage success clears input and uses selected preset model`() = runTest {
+    fun `sendMessage success clears input and uses selected server model`() = runTest {
         coEvery { repository.sendMessage(any(), any(), any(), any()) } returns Result.success(Unit)
         coEvery { repository.getSessions(100) } returns Result.success(
             listOf(com.yage.opencode_client.data.model.Session(id = "session-1", directory = "/tmp/project"))
@@ -207,13 +206,13 @@ class MainViewModelTest {
         advanceUntilIdle()
         viewModel.setInputText("  hello world  ")
         viewModel.selectAgent("review")
-        updateState(viewModel) { it.copy(providers = providersFor(ModelPresets.list[1])) }
-        viewModel.selectModel(ModelPresets.list[1])
+        val selected = AppState.ModelOption("GPT-5.6 Terra Fast", "openai", "gpt-5.6-terra-fast")
+        updateState(viewModel) { it.copy(providers = providersFor(selected)) }
+        viewModel.selectModel(selected)
 
         viewModel.sendMessage()
         advanceUntilIdle()
 
-        val selected = ModelPresets.list[1]
         coVerify {
             repository.sendMessage(
                 "session-1",
@@ -234,6 +233,19 @@ class MainViewModelTest {
         )
 
         assertNull(buildSelectedModel(state))
+    }
+
+    @Test
+    fun `saved model becomes sendable when the current server publishes it`() {
+        val state = AppState(
+            selectedModelReference = "openai/gpt-5.6-terra-fast",
+            providers = providersFor(AppState.ModelOption("GPT-5.6 Terra Fast", "openai", "gpt-5.6-terra-fast"))
+        )
+
+        assertEquals(
+            Message.ModelInfo("openai", "gpt-5.6-terra-fast"),
+            buildSelectedModel(state)
+        )
     }
 
     @Test
@@ -786,8 +798,8 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `loadMessages updates selected agent and preset model from last assistant`() = runTest {
-        val preset = ModelPresets.list[2]
+    fun `loadMessages does not turn a past assistant model into a new selection`() = runTest {
+        val pastModel = AppState.ModelOption("GPT-5.6 Terra Fast", "openai", "gpt-5.6-terra-fast")
         val messages = listOf(
             MessageWithParts(info = Message(id = "u1", role = "user")),
             MessageWithParts(
@@ -795,7 +807,7 @@ class MainViewModelTest {
                     id = "a1",
                     role = "assistant",
                     agent = "plan",
-                    model = Message.ModelInfo(preset.providerId, preset.modelId)
+                    model = Message.ModelInfo(pastModel.providerId, pastModel.modelId)
                 )
             )
         )
@@ -809,7 +821,7 @@ class MainViewModelTest {
 
         assertEquals(messages, viewModel.state.value.messages)
         assertEquals("plan", viewModel.state.value.selectedAgentName)
-        assertEquals(ModelPresets.reference(preset), viewModel.state.value.selectedModelReference)
+        assertNull(viewModel.state.value.selectedModelReference)
     }
 
     @Test
@@ -1131,7 +1143,7 @@ class MainViewModelTest {
 
     @Test
     fun `selectModel with active session saves model reference per session`() = runTest {
-        val selected = ModelPresets.list[2]
+        val selected = AppState.ModelOption("DeepSeek V4 Pro", "deepseek", "deepseek-v4-pro")
         val viewModel = createViewModel()
         updateState(viewModel) {
             it.copy(currentSessionId = "s1", providers = providersFor(selected))
@@ -1139,15 +1151,16 @@ class MainViewModelTest {
 
         viewModel.selectModel(selected)
 
-        verify { settingsManager.setModelReferenceForSession("s1", ModelPresets.reference(selected)) }
+        verify { settingsManager.setModelReferenceForSession("s1", selected.reference) }
     }
 
     @Test
     fun `selectModel ignores a model absent from the connected server`() = runTest {
-        val unavailable = ModelPresets.findByReference("kimi-for-coding/k3")!!
+        val unavailable = AppState.ModelOption("Kimi K3", "kimi-for-coding", "k3")
+        val available = AppState.ModelOption("GPT-5.6 Terra Fast", "openai", "gpt-5.6-terra-fast")
         val viewModel = createViewModel()
         updateState(viewModel) {
-            it.copy(currentSessionId = "s1", providers = providersFor(ModelPresets.list.first()))
+            it.copy(currentSessionId = "s1", providers = providersFor(available))
         }
 
         viewModel.selectModel(unavailable)
@@ -1155,6 +1168,18 @@ class MainViewModelTest {
         assertNull(viewModel.state.value.selectedModelReference)
         verify(exactly = 0) { settingsManager.selectedModelReference = any() }
         verify(exactly = 0) { settingsManager.setModelReferenceForSession(any(), any()) }
+    }
+
+    @Test
+    fun `selectServerDefault clears global and current session references`() = runTest {
+        val viewModel = createViewModel()
+        updateState(viewModel) { it.copy(currentSessionId = "s1", selectedModelReference = "openai/gpt-5.6-terra-fast") }
+
+        viewModel.selectServerDefault()
+
+        assertNull(viewModel.state.value.selectedModelReference)
+        verify { settingsManager.selectedModelReference = null }
+        verify { settingsManager.setModelReferenceForSession("s1", null) }
     }
     @Test
     fun `selectAgent with active session saves agent name per session`() = runTest {
@@ -1182,14 +1207,14 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `loadMessages uses per-session saved model reference over message inference`() = runTest {
-        val inferredPreset = ModelPresets.list[2]
+    fun `loadMessages restores a per-session model reference without a static whitelist`() = runTest {
+        val pastModel = AppState.ModelOption("GPT-5.6 Terra Fast", "openai", "gpt-5.6-terra-fast")
         val messages = listOf(
             MessageWithParts(
                 info = Message(
                     id = "a1",
                     role = "assistant",
-                    model = Message.ModelInfo(inferredPreset.providerId, inferredPreset.modelId)
+                    model = Message.ModelInfo(pastModel.providerId, pastModel.modelId)
                 )
             )
         )

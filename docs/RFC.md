@@ -519,11 +519,11 @@ fun setDraftText(sessionId: String, text: String) {
 
 ### 4.4 Model/Agent 按 Session 记忆（Phase 5，对齐 iOS）
 
-**模型选择合同（2026-07-22 更新）**：模型选择不再使用 `ModelPresets.list` 的整数下标。`AppState`、全局偏好和会话偏好均使用规范引用 `providerId/modelId`，避免个人白名单重排、过滤或切换服务器时把旧选择静默指向另一模型。
+**模型选择合同（2026-07-22 更新）**：模型目录直接来自当前 OpenCode Server 的 `GET /config/providers`，不使用 `ModelPresets` 或名称白名单。每个有效项以 `providerId/modelId` 规范引用：优先模型返回的 `providerID/providerId` 与 `id`，为空时才回退父 provider ID 与 models map key。目录项稳定排序、去重，并显示服务端名称及精确引用。
 
-**数据存储与迁移**：`SettingsManager` 保存全局 `selected_model_ref` 和会话映射 `session_model_refs`；`ModelSelectionMigration` 在首次启动时将旧 `model_index` 与 `session_models` 转为 schema 2。只有原八项列表中仍受白名单支持的引用可迁移，其余值清除，不以新列表位置替代。Agent 继续以 `agentName` 字符串按会话保存。
+**数据存储与迁移**：`SettingsManager` 保存全局 `selected_model_ref` 和会话映射 `session_model_refs`；`ModelSelectionMigration` 在首次启动时将旧 `model_index` 与 `session_models` 转为 schema 2 的原始引用，不以当前目录位置解释。Agent 继续以 `agentName` 字符串按会话保存。
 
-**恢复与写入**：会话已保存的模型引用和历史消息中的 `resolvedModel` 只能在静态白名单内恢复。`selectModel(model)` 仅接受当前 `GET /config/providers` 响应与白名单的交集，并同时更新全局和当前会话引用。若已保存引用不在当前服务器交集中，界面不显示替代模型，提示请求也不携带显式模型，由服务器默认模型处理。
+**恢复与写入**：`selectModel(model)` 仅接受当前动态目录中的精确项，并同时更新全局和当前会话引用。菜单首项“服务端默认”清除这些引用，令 Prompt 不带 `model`。`default` 映射可有多个 provider 默认，客户端不推断唯一全局默认。若保存的引用不在当前目录，保存值不改写，本次请求不携带显式模型，顶栏显示“服务端默认”。
 
 ---
 
@@ -776,31 +776,22 @@ fun AgentCapsule(
 }
 ```
 
-**shortName 计算属性**：给 `AppState.ModelOption` 新增 `shortName`，逻辑对齐 iOS `ModelPreset.shortName`：
+**模型标识**：`AppState.ModelOption` 保存服务端显示名称和请求身份，并提供不可变 `reference`：
 
 ```kotlin
 data class ModelOption(val displayName: String, val providerId: String, val modelId: String) {
-    val shortName: String
-        get() = when {
-            "DeepSeek" in displayName -> "DeepSeek"
-            "Haiku" in displayName -> "Haiku"
-            "Gemini" in displayName -> "Gemini"
-            "GPT" in displayName -> "GPT"
-            "Grok" in displayName -> "Grok"
-            else -> displayName.split(" ").firstOrNull() ?: displayName
-        }
+    val reference: String get() = "$providerId/$modelId"
 }
 ```
 
 **ChatTopBar 中的接线**：
-- Model Capsule 按 `selectedModelReference` 在 `availableModels` 中查找并显示 `shortName`；不匹配时显示 `"Model"`
+- Model Capsule 按 `selectedModelReference` 在 `availableModels` 中查找并显示服务端模型名；不匹配或未选择时显示“服务端默认”
 - Agent Capsule 显示 `selectedAgent`（agent name 本身通常已经足够简短）
-- DropdownMenu 逻辑保持不变，只是触发按钮从 IconButton 变为 Capsule
+- DropdownMenu 顶部提供“服务端默认（不指定模型）”，每个目录项显示服务端名称和 `providerId/modelId`，长目录在有界滚动容器中呈现
 
 **影响范围**：
 - `ChatTopBar.kt`：替换 Model/Agent 的 IconButton 为 Capsule
-- `MainViewModel.kt`：`ModelOption` data class 新增 `shortName`
-- `ModelPresets.kt`：无需改动（`shortName` 是计算属性）
+- `MainViewModel.kt`：`ModelOption` 及服务端目录扁平化
 
 ### 5.7 平板 Toolbar 适配（Phase 5b）
 

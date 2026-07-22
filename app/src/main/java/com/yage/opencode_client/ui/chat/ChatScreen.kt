@@ -187,6 +187,7 @@ fun ChatScreen(
                 onRefreshSessions = viewModel::loadSessions,
                 onToggleSessionExpanded = viewModel::toggleSessionExpanded,
                 onSelectModel = viewModel::selectModel,
+                onSelectServerDefault = viewModel::selectServerDefault,
                 onOpenAIUsage = viewModel::loadAIUsage,
                 onRefreshAIUsage = viewModel::refreshAIUsage,
                 onNavigateToSettings = onNavigateToSettings,
