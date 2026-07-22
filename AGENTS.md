@@ -4,6 +4,7 @@
 
 - `app/` contains the Android client source, resources, and its offline/instrumented tests; see `app/AGENTS.md` for module-local model, test, and device-safety facts.
 - `docs/` contains product, architecture, design and test documents, personal requirements, and temporary reviewable implementation plans; see `docs/AGENTS.md` for its local document lifecycle.
+- `opencode.json` is the credential-free project OpenCode runtime configuration. It makes `kimi-for-coding/k3` the server default and applies `reasoningEffort: low`; it is loaded only when OpenCode is launched from this project tree.
 
 ## Build Environment
 
