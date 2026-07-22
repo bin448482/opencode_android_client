@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.net.InetAddress
 
 class AIUsageClientTest {
     private val server = MockWebServer()
@@ -16,7 +17,7 @@ class AIUsageClientTest {
 
     @Before
     fun setup() {
-        server.start()
+        server.start(InetAddress.getLoopbackAddress(), 0)
         client = AIUsageClient(OkHttpClient())
     }
 
@@ -31,7 +32,7 @@ class AIUsageClientTest {
             """{"generated_at":"2026-07-12T09:00:00","quotas":[{"provider":"codex","label":"5h","used_percentage":29,"remaining_percentage":71,"next_reset_time_ms":1783842841000}]}"""
         ))
 
-        val result = client.fetchQuotas(server.url("/").toString())
+        val result = client.fetchQuotas(server.url("/").newBuilder().host("127.0.0.1").build().toString())
 
         assertTrue(result.isSuccess)
         assertEquals("2026-07-12T09:00:00", result.getOrThrow().generatedAt)
@@ -45,7 +46,7 @@ class AIUsageClientTest {
         server.enqueue(MockResponse().setHeader("Content-Type", "application/json").setBody(
             """{"generated_at":null,"quotas":[]}"""
         ))
-        val baseUrl = server.url("/").toString()
+        val baseUrl = server.url("/").newBuilder().host("127.0.0.1").build().toString()
 
         client.refreshDashboard(baseUrl).getOrThrow()
         client.fetchQuotas(baseUrl).getOrThrow()
@@ -63,6 +64,7 @@ class AIUsageClientTest {
     fun `normalization accepts private HTTP and rejects public HTTP`() {
         assertEquals("http://192.168.1.4:7995/api/v1/quotas", client.quotasEndpoint("192.168.1.4:7995"))
         assertEquals("http://host.example.ts.net:7995/api/v1/quotas", client.quotasEndpoint("http://host.example.ts.net:7995"))
+        assertEquals("http://[::1]:7995/api/v1/quotas", client.quotasEndpoint("http://[::1]:7995"))
         assertTrue(runCatching { client.quotasEndpoint("http://example.com:7995") }.isFailure)
     }
 }

@@ -73,7 +73,7 @@ class ForkSessionTest {
         every { settingsManager.username } returns null
         every { settingsManager.password } returns null
         every { settingsManager.currentSessionId } returns null
-        every { settingsManager.selectedModelIndex } returns 0
+        every { settingsManager.selectedModelReference } returns null
         every { settingsManager.selectedAgentName } returns null
         every { settingsManager.themeMode } returns ThemeMode.SYSTEM
         every { settingsManager.aiBuilderBaseURL } returns "https://space.ai-builders.com/backend"
@@ -87,7 +87,7 @@ class ForkSessionTest {
         every { settingsManager.username = any() } just runs
         every { settingsManager.password = any() } just runs
         every { settingsManager.currentSessionId = any() } just runs
-        every { settingsManager.selectedModelIndex = any() } just runs
+        every { settingsManager.selectedModelReference = any() } just runs
         every { settingsManager.selectedAgentName = any() } just runs
         every { settingsManager.themeMode = any() } just runs
         every { settingsManager.aiBuilderBaseURL = any() } just runs
@@ -97,10 +97,12 @@ class ForkSessionTest {
         every { settingsManager.aiBuilderLastOKSignature = any() } just runs
         every { settingsManager.aiBuilderLastOKTestedAt = any() } just runs
 
+        every { settingsManager.migrateModelSelections() } just runs
+
         every { settingsManager.getDraftText(any()) } returns ""
         every { settingsManager.setDraftText(any(), any()) } just runs
-        every { settingsManager.getModelForSession(any()) } returns null
-        every { settingsManager.setModelForSession(any(), any()) } just runs
+        every { settingsManager.getModelReferenceForSession(any()) } returns null
+        every { settingsManager.setModelReferenceForSession(any(), any()) } just runs
         every { settingsManager.getAgentForSession(any()) } returns null
         every { settingsManager.setAgentForSession(any(), any()) } just runs
 

@@ -79,6 +79,8 @@ import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
 
+private const val SHOW_VOICE_INPUT = false
+
 @Composable
 internal fun ChatInputBar(
     text: String,
@@ -100,15 +102,20 @@ internal fun ChatInputBar(
     onAbortSpeech: () -> Unit,
     onRetrySpeech: () -> Unit,
     onDiscardSpeech: () -> Unit,
-    onToggleRecording: () -> Unit
+    onToggleRecording: () -> Unit,
+    showVoiceInput: Boolean = SHOW_VOICE_INPUT
 ) {
     val canSend = (text.isNotBlank() || imageAttachments.isNotEmpty()) && !isTranscribing && !isRetryingSpeech
-    val voiceStatus = when {
-        isRecording -> stringResource(R.string.chat_listening)
-        isTranscribing -> stringResource(R.string.chat_transcribing)
-        isRetryingSpeech -> stringResource(R.string.chat_retry_segment)
-        hasPreservedSpeechAudio -> stringResource(R.string.chat_preserved_audio)
-        else -> null
+    val voiceStatus = if (showVoiceInput) {
+        when {
+            isRecording -> stringResource(R.string.chat_listening)
+            isTranscribing -> stringResource(R.string.chat_transcribing)
+            isRetryingSpeech -> stringResource(R.string.chat_retry_segment)
+            hasPreservedSpeechAudio -> stringResource(R.string.chat_preserved_audio)
+            else -> null
+        }
+    } else {
+        null
     }
     val composerStatus = listOfNotNull(
         if (isBusy) agentActivityText ?: stringResource(R.string.chat_agent_running) else null,
@@ -133,18 +140,20 @@ internal fun ChatInputBar(
                 )
             }
 
-            VoiceRail(
-                isRecording = isRecording,
-                isTranscribing = isTranscribing,
-                isRetryingSpeech = isRetryingSpeech,
-                hasPreservedSpeechAudio = hasPreservedSpeechAudio,
-                audioLevel = speechAudioLevel,
-                isSpeechConfigured = isSpeechConfigured,
-                onToggleRecording = onToggleRecording,
-                onAbortSpeech = onAbortSpeech,
-                onRetrySpeech = onRetrySpeech,
-                onDiscardSpeech = onDiscardSpeech,
-            )
+            if (showVoiceInput) {
+                VoiceRail(
+                    isRecording = isRecording,
+                    isTranscribing = isTranscribing,
+                    isRetryingSpeech = isRetryingSpeech,
+                    hasPreservedSpeechAudio = hasPreservedSpeechAudio,
+                    audioLevel = speechAudioLevel,
+                    isSpeechConfigured = isSpeechConfigured,
+                    onToggleRecording = onToggleRecording,
+                    onAbortSpeech = onAbortSpeech,
+                    onRetrySpeech = onRetrySpeech,
+                    onDiscardSpeech = onDiscardSpeech,
+                )
+            }
 
             if (imageAttachments.isNotEmpty()) {
                 ImageAttachmentStrip(
@@ -181,7 +190,7 @@ internal fun ChatInputBar(
                 ) {
                     if (text.isEmpty()) {
                         Text(
-                            if (isRecording) stringResource(R.string.chat_transcription_placeholder) else stringResource(R.string.chat_type_message),
+                            if (showVoiceInput && isRecording) stringResource(R.string.chat_transcription_placeholder) else stringResource(R.string.chat_type_message),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                         )

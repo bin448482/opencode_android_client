@@ -381,7 +381,7 @@ data class AppState(
     val isLoadingMessages: Boolean = false,
     val agents: List<AgentInfo> = emptyList(),
     val selectedAgentName: String = "build",
-    val selectedModelIndex: Int = 0,
+    val selectedModelReference: String? = null,
     val providers: ProvidersResponse? = null,
     val pendingPermissions: List<PermissionRequest> = emptyList(),
     val pendingQuestions: List<QuestionRequest> = emptyList(),
@@ -519,50 +519,11 @@ fun setDraftText(sessionId: String, text: String) {
 
 ### 4.4 Model/Agent 按 Session 记忆（Phase 5，对齐 iOS）
 
-**背景**：当前 `selectedModelIndex` 和 `selectedAgentName` 全局存储在 SettingsManager。切换 session 时通过 last assistant message 推断，但用户手动切了模型还没发消息就切走的场景会丢失选择。iOS 用 `selectedModelIDBySessionID` 字典做显式 per-session 持久化；Android 实现用 Int 索引（对应 `ModelPresets.list` 下标）而非 modelID 字符串。
+**模型选择合同（2026-07-22 更新）**：模型选择不再使用 `ModelPresets.list` 的整数下标。`AppState`、全局偏好和会话偏好均使用规范引用 `providerId/modelId`，避免个人白名单重排、过滤或切换服务器时把旧选择静默指向另一模型。
 
-**数据存储**：
+**数据存储与迁移**：`SettingsManager` 保存全局 `selected_model_ref` 和会话映射 `session_model_refs`；`ModelSelectionMigration` 在首次启动时将旧 `model_index` 与 `session_models` 转为 schema 2。只有原八项列表中仍受白名单支持的引用可迁移，其余值清除，不以新列表位置替代。Agent 继续以 `agentName` 字符串按会话保存。
 
-```kotlin
-// SettingsManager 新增
-// 注意：模型存储的是 Int 索引（对应 ModelPresets.list 下标），不是 "{providerID}/{modelID}" 字符串
-// 底层用 Map<String, String> 持久化，取出时再 toIntOrNull()
-
-fun getModelForSession(sessionId: String): Int? {
-    val json = encryptedPrefs.getString(KEY_SESSION_MODELS, null) ?: return null
-    return try {
-        Json.decodeFromString<Map<String, String>>(json)[sessionId]?.toIntOrNull()
-    } catch (e: Exception) {
-        null
-    }
-}
-
-fun setModelForSession(sessionId: String, modelIndex: Int) {
-    val json = encryptedPrefs.getString(KEY_SESSION_MODELS, null)
-    val map: MutableMap<String, String> = try {
-        json?.let { Json.decodeFromString<Map<String, String>>(it).toMutableMap() } ?: mutableMapOf()
-    } catch (e: Exception) {
-        mutableMapOf()
-    }
-    map[sessionId] = modelIndex.toString()
-    encryptedPrefs.edit().putString(KEY_SESSION_MODELS, Json.encodeToString(map)).apply()
-}
-
-// Agent 同理（存字符串 agentName）
-fun getAgentForSession(sessionId: String): String? { /* 同上模式 */ }
-fun setAgentForSession(sessionId: String, agentName: String) { /* 同上模式 */ }
-```
-
-**恢复优先级**（切换到 session X 时）：
-1. 查 `getModelForSession(X)` → 有值则直接恢复
-2. 无值 → 从 X 的最后一条 assistant message 推断（当前已有此逻辑）
-3. 推断不到 → 保持当前全局 selectedModelIndex 不变
-
-**写入时机**：
-- `selectModel(index)` 时：若 `currentSessionId != null`，同时调 `setModelForSession(sessionId, index)`（存 Int 索引）
-- `selectAgent(name)` 时：同理，调 `setAgentForSession(sessionId, agentName)`
-
-**全局默认值保留**：SettingsManager 中原有的全局 `selectedModelIndex` 和 `selectedAgentName` 继续保留，作为新 session 或无 per-session 记录时的 fallback。
+**恢复与写入**：会话已保存的模型引用和历史消息中的 `resolvedModel` 只能在静态白名单内恢复。`selectModel(model)` 仅接受当前 `GET /config/providers` 响应与白名单的交集，并同时更新全局和当前会话引用。若已保存引用不在当前服务器交集中，界面不显示替代模型，提示请求也不携带显式模型，由服务器默认模型处理。
 
 ---
 
@@ -832,7 +793,7 @@ data class ModelOption(val displayName: String, val providerId: String, val mode
 ```
 
 **ChatTopBar 中的接线**：
-- Model Capsule 显示 `availableModels.getOrNull(selectedModelIndex)?.shortName ?: "Model"`
+- Model Capsule 按 `selectedModelReference` 在 `availableModels` 中查找并显示 `shortName`；不匹配时显示 `"Model"`
 - Agent Capsule 显示 `selectedAgent`（agent name 本身通常已经足够简短）
 - DropdownMenu 逻辑保持不变，只是触发按钮从 IconButton 变为 Capsule
 

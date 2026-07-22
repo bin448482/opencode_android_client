@@ -27,7 +27,7 @@ class AppStateTest {
         assertFalse(state.isLoadingMessages)
         assertTrue(state.agents.isEmpty())
         assertEquals("build", state.selectedAgentName)
-        assertEquals(2, state.selectedModelIndex)
+        assertNull(state.selectedModelReference)
         assertNull(state.providers)
         assertTrue(state.pendingPermissions.isEmpty())
         assertEquals("", state.inputText)
@@ -153,32 +153,46 @@ class AppStateTest {
     }
 
     @Test
-    fun `availableModels returns curated presets (filtered like iOS)`() {
-        val state = AppState()
-        val models = state.availableModels
+    fun `availableModels returns only curated models confirmed by the server`() {
+        val state = AppState(
+            providers = makeProviders(
+                Triple("openai", "gpt-5.6-sol", "GPT-5.6 Sol"),
+                Triple("ds4", "deepseek-v4-flash", "DeepSeek Local"),
+                Triple("deepseek", "deepseek-v4-pro", "DeepSeek V4 Pro"),
+                Triple("kimi-for-coding", "k3", "Kimi K3"),
+                Triple("openai", "unlisted-model", "Unlisted")
+            )
+        )
 
-        assertEquals(ModelPresets.list.size, models.size)
-        assertEquals(ModelPresets.list, models)
-        assertEquals("GLM-5.2", models[0].displayName)
-        assertEquals("zai-coding-plan", models[0].providerId)
-        assertEquals("glm-5.2", models[0].modelId)
-        assertEquals("GPT-5.6 Sol", models[1].displayName)
-        assertEquals("openai", models[1].providerId)
-        assertEquals("gpt-5.6-sol", models[1].modelId)
-        assertTrue(models.any {
-            it.displayName == "GPT-5.6 Sol Pro" && it.providerId == "openai" && it.modelId == "gpt-5.6-sol-pro"
-        })
-        assertTrue(models.any {
-            it.displayName == "GPT-5.6 Sol Fast" && it.providerId == "openai" && it.modelId == "gpt-5.6-sol-fast"
-        })
+        assertEquals(ModelPresets.list, state.availableModels)
+        assertEquals(
+            listOf("openai/gpt-5.6-sol", "ds4/deepseek-v4-flash", "deepseek/deepseek-v4-pro", "kimi-for-coding/k3"),
+            state.availableModels.map { ModelPresets.reference(it) }
+        )
     }
 
     @Test
-    fun `availableModels independent of providers`() {
-        val stateWithProviders = AppState(providers = makeProviders(Triple("openai", "gpt-4", "GPT-4")))
-        val stateWithoutProviders = AppState(providers = null)
-        assertEquals(stateWithProviders.availableModels, stateWithoutProviders.availableModels)
-        assertEquals(ModelPresets.list, stateWithProviders.availableModels)
+    fun `availableModels is empty until the server confirms a matching model`() {
+        val unavailable = AppState(providers = makeProviders(Triple("openai", "gpt-4", "GPT-4")))
+
+        assertTrue(AppState().availableModels.isEmpty())
+        assertTrue(unavailable.availableModels.isEmpty())
+    }
+
+    @Test
+    fun `availableModels accepts the server model provider ID alias`() {
+        val state = AppState(
+            providers = ProvidersResponse(
+                providers = listOf(
+                    ConfigProvider(
+                        id = "catalog",
+                        models = mapOf("k3" to ProviderModel(id = "k3", providerId = "kimi-for-coding"))
+                    )
+                )
+            )
+        )
+
+        assertEquals(ModelPresets.findByReference("kimi-for-coding/k3"), state.availableModels.single())
     }
 
     private fun makeContextUsageState(

@@ -73,9 +73,11 @@ class SettingsManager @Inject constructor(
         get() = encryptedPrefs.getString(KEY_SESSION_ID, null)
         set(value) = encryptedPrefs.edit().putString(KEY_SESSION_ID, value).apply()
 
-    var selectedModelIndex: Int
-        get() = encryptedPrefs.getInt(KEY_MODEL_INDEX, 1)
-        set(value) = encryptedPrefs.edit().putInt(KEY_MODEL_INDEX, value).apply()
+    var selectedModelReference: String?
+        get() = encryptedPrefs.getString(KEY_SELECTED_MODEL_REFERENCE, null)
+        set(value) = encryptedPrefs.edit().apply {
+            if (value == null) remove(KEY_SELECTED_MODEL_REFERENCE) else putString(KEY_SELECTED_MODEL_REFERENCE, value)
+        }.apply()
 
     var selectedAgentName: String?
         get() = encryptedPrefs.getString(KEY_AGENT_NAME, null)
@@ -153,24 +155,59 @@ class SettingsManager @Inject constructor(
         encryptedPrefs.edit().putString(KEY_SESSION_DRAFTS, Json.encodeToString(map)).apply()
     }
 
-    fun getModelForSession(sessionId: String): Int? {
-        val json = encryptedPrefs.getString(KEY_SESSION_MODELS, null) ?: return null
+    fun migrateModelSelections() {
+        val schemaVersion = runCatching {
+            encryptedPrefs.getInt(KEY_MODEL_SELECTION_SCHEMA, 1)
+        }.getOrDefault(1)
+        if (schemaVersion >= ModelSelectionMigration.CURRENT_SCHEMA_VERSION) return
+
+        val legacyReference = runCatching {
+            if (encryptedPrefs.contains(KEY_MODEL_INDEX)) {
+                ModelSelectionMigration.referenceForLegacyIndex(encryptedPrefs.getInt(KEY_MODEL_INDEX, -1))
+            } else {
+                null
+            }
+        }.getOrNull()
+        val legacySessionModels = encryptedPrefs.getString(KEY_SESSION_MODELS, null)
+        val migratedSessionModels = try {
+            legacySessionModels?.let { Json.decodeFromString<Map<String, String>>(it) }
+                ?.let(ModelSelectionMigration::migrateLegacySessionModels)
+                ?: emptyMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+
+        encryptedPrefs.edit().apply {
+            if (legacyReference == null) remove(KEY_SELECTED_MODEL_REFERENCE) else putString(KEY_SELECTED_MODEL_REFERENCE, legacyReference)
+            if (migratedSessionModels.isEmpty()) remove(KEY_SESSION_MODEL_REFERENCES)
+            else putString(KEY_SESSION_MODEL_REFERENCES, Json.encodeToString(migratedSessionModels))
+            remove(KEY_MODEL_INDEX)
+            remove(KEY_SESSION_MODELS)
+            putInt(KEY_MODEL_SELECTION_SCHEMA, ModelSelectionMigration.CURRENT_SCHEMA_VERSION)
+        }.apply()
+    }
+
+    fun getModelReferenceForSession(sessionId: String): String? {
+        val json = encryptedPrefs.getString(KEY_SESSION_MODEL_REFERENCES, null) ?: return null
         return try {
-            Json.decodeFromString<Map<String, String>>(json)[sessionId]?.toIntOrNull()
+            Json.decodeFromString<Map<String, String>>(json)[sessionId]
         } catch (e: Exception) {
             null
         }
     }
 
-    fun setModelForSession(sessionId: String, modelIndex: Int) {
-        val json = encryptedPrefs.getString(KEY_SESSION_MODELS, null)
+    fun setModelReferenceForSession(sessionId: String, modelReference: String?) {
+        val json = encryptedPrefs.getString(KEY_SESSION_MODEL_REFERENCES, null)
         val map: MutableMap<String, String> = try {
             json?.let { Json.decodeFromString<Map<String, String>>(it).toMutableMap() } ?: mutableMapOf()
         } catch (e: Exception) {
             mutableMapOf()
         }
-        map[sessionId] = modelIndex.toString()
-        encryptedPrefs.edit().putString(KEY_SESSION_MODELS, Json.encodeToString(map)).apply()
+        if (modelReference == null) map.remove(sessionId) else map[sessionId] = modelReference
+        encryptedPrefs.edit().apply {
+            if (map.isEmpty()) remove(KEY_SESSION_MODEL_REFERENCES)
+            else putString(KEY_SESSION_MODEL_REFERENCES, Json.encodeToString(map))
+        }.apply()
     }
 
     fun getAgentForSession(sessionId: String): String? {
@@ -210,6 +247,8 @@ class SettingsManager @Inject constructor(
         private const val KEY_SSH_PUBLIC_KEY = "ssh_public_key"
         private const val KEY_KNOWN_HOSTS = "ssh_known_hosts_json"
         private const val KEY_SESSION_ID = "session_id"
+        private const val KEY_MODEL_SELECTION_SCHEMA = "model_selection_schema"
+        private const val KEY_SELECTED_MODEL_REFERENCE = "selected_model_ref"
         private const val KEY_MODEL_INDEX = "model_index"
         private const val KEY_AGENT_NAME = "agent_name"
         private const val KEY_THEME = "theme"
@@ -223,6 +262,7 @@ class SettingsManager @Inject constructor(
         private const val KEY_AI_USAGE_DASHBOARD_URL = "ai_usage_dashboard_url"
         private const val KEY_SESSION_DRAFTS = "session_drafts"
         private const val KEY_SESSION_MODELS = "session_models"
+        private const val KEY_SESSION_MODEL_REFERENCES = "session_model_refs"
         private const val KEY_SESSION_AGENTS = "session_agents"
         private const val KEY_NFC_ENABLED = "nfc_enabled"
         private const val KEY_NFC_PROMPT = "nfc_prompt"

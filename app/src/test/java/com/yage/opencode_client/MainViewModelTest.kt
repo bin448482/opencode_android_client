@@ -11,6 +11,9 @@ import com.yage.opencode_client.data.model.Session
 import com.yage.opencode_client.data.model.SessionStatus
 import com.yage.opencode_client.data.model.SSEEvent
 import com.yage.opencode_client.data.model.SSEPayload
+import com.yage.opencode_client.data.model.ConfigProvider
+import com.yage.opencode_client.data.model.ProviderModel
+import com.yage.opencode_client.data.model.ProvidersResponse
 import com.yage.opencode_client.data.model.HealthResponse
 import com.yage.opencode_client.data.model.HostProfile
 import com.yage.opencode_client.data.repository.HostProfileStore
@@ -20,6 +23,7 @@ import com.yage.opencode_client.ssh.TunnelManager
 import com.yage.opencode_client.ui.AppState
 import com.yage.opencode_client.ui.MainViewModel
 import com.yage.opencode_client.ui.ModelPresets
+import com.yage.opencode_client.ui.buildSelectedModel
 import com.yage.opencode_client.ui.session.buildSessionTree
 import com.yage.opencode_client.util.SettingsManager
 import com.yage.opencode_client.util.ThemeMode
@@ -92,7 +96,7 @@ class MainViewModelTest {
         every { settingsManager.username } returns null
         every { settingsManager.password } returns null
         every { settingsManager.currentSessionId } returns null
-        every { settingsManager.selectedModelIndex } returns 0
+        every { settingsManager.selectedModelReference } returns null
         every { settingsManager.selectedAgentName } returns null
         every { settingsManager.themeMode } returns ThemeMode.SYSTEM
         every { settingsManager.aiBuilderBaseURL } returns "https://space.ai-builders.com/backend"
@@ -106,7 +110,7 @@ class MainViewModelTest {
         every { settingsManager.username = any() } just runs
         every { settingsManager.password = any() } just runs
         every { settingsManager.currentSessionId = any() } just runs
-        every { settingsManager.selectedModelIndex = any() } just runs
+        every { settingsManager.selectedModelReference = any() } just runs
         every { settingsManager.selectedAgentName = any() } just runs
         every { settingsManager.themeMode = any() } just runs
         every { settingsManager.aiBuilderBaseURL = any() } just runs
@@ -116,10 +120,12 @@ class MainViewModelTest {
         every { settingsManager.aiBuilderLastOKSignature = any() } just runs
         every { settingsManager.aiBuilderLastOKTestedAt = any() } just runs
 
+        every { settingsManager.migrateModelSelections() } just runs
+
         every { settingsManager.getDraftText(any()) } returns ""
         every { settingsManager.setDraftText(any(), any()) } just runs
-        every { settingsManager.getModelForSession(any()) } returns null
-        every { settingsManager.setModelForSession(any(), any()) } just runs
+        every { settingsManager.getModelReferenceForSession(any()) } returns null
+        every { settingsManager.setModelReferenceForSession(any(), any()) } just runs
         every { settingsManager.getAgentForSession(any()) } returns null
         every { settingsManager.setAgentForSession(any(), any()) } just runs
 
@@ -133,6 +139,17 @@ class MainViewModelTest {
     private fun createViewModel(): MainViewModel {
         return MainViewModel(repository, settingsManager, voiceFlowClient, microphone, hostProfileStore, tunnelManager, sshKeyManager)
     }
+
+    private fun providersFor(vararg models: AppState.ModelOption): ProvidersResponse = ProvidersResponse(
+        providers = models.groupBy { it.providerId }.map { (providerId, group) ->
+            ConfigProvider(
+                id = providerId,
+                models = group.associate { model ->
+                    model.modelId to ProviderModel(id = model.modelId)
+                }
+            )
+        }
+    )
 
     private fun updateState(viewModel: MainViewModel, transform: (AppState) -> AppState) {
         val field = MainViewModel::class.java.getDeclaredField("_state")
@@ -155,13 +172,13 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `init clamps saved model index and configures repository`() = runTest {
-        every { settingsManager.selectedModelIndex } returns 999
+    fun `init migrates and restores saved model reference`() = runTest {
+        every { settingsManager.selectedModelReference } returns "openai/gpt-5.6-sol"
 
         val viewModel = createViewModel()
 
-        assertEquals(ModelPresets.list.lastIndex, viewModel.state.value.selectedModelIndex)
-        verify { settingsManager.selectedModelIndex = ModelPresets.list.lastIndex }
+        assertEquals("openai/gpt-5.6-sol", viewModel.state.value.selectedModelReference)
+        verify { settingsManager.migrateModelSelections() }
         verify { repository.configure("http://server.test", null, null) }
     }
 
@@ -190,7 +207,8 @@ class MainViewModelTest {
         advanceUntilIdle()
         viewModel.setInputText("  hello world  ")
         viewModel.selectAgent("review")
-        viewModel.selectModel(1)
+        updateState(viewModel) { it.copy(providers = providersFor(ModelPresets.list[1])) }
+        viewModel.selectModel(ModelPresets.list[1])
 
         viewModel.sendMessage()
         advanceUntilIdle()
@@ -206,6 +224,16 @@ class MainViewModelTest {
         }
         assertEquals("", viewModel.state.value.inputText)
         assertNull(viewModel.state.value.error)
+    }
+
+    @Test
+    fun `unavailable saved model is omitted from the prompt`() {
+        val state = AppState(
+            selectedModelReference = "openai/gpt-5.6-sol",
+            providers = ProvidersResponse()
+        )
+
+        assertNull(buildSelectedModel(state))
     }
 
     @Test
@@ -781,7 +809,7 @@ class MainViewModelTest {
 
         assertEquals(messages, viewModel.state.value.messages)
         assertEquals("plan", viewModel.state.value.selectedAgentName)
-        assertEquals(2, viewModel.state.value.selectedModelIndex)
+        assertEquals(ModelPresets.reference(preset), viewModel.state.value.selectedModelReference)
     }
 
     @Test
@@ -1102,15 +1130,32 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `selectModel with active session saves model index per session`() = runTest {
+    fun `selectModel with active session saves model reference per session`() = runTest {
+        val selected = ModelPresets.list[2]
         val viewModel = createViewModel()
-        updateState(viewModel) { it.copy(currentSessionId = "s1") }
+        updateState(viewModel) {
+            it.copy(currentSessionId = "s1", providers = providersFor(selected))
+        }
 
-        viewModel.selectModel(2)
+        viewModel.selectModel(selected)
 
-        verify { settingsManager.setModelForSession("s1", 2) }
+        verify { settingsManager.setModelReferenceForSession("s1", ModelPresets.reference(selected)) }
     }
 
+    @Test
+    fun `selectModel ignores a model absent from the connected server`() = runTest {
+        val unavailable = ModelPresets.findByReference("kimi-for-coding/k3")!!
+        val viewModel = createViewModel()
+        updateState(viewModel) {
+            it.copy(currentSessionId = "s1", providers = providersFor(ModelPresets.list.first()))
+        }
+
+        viewModel.selectModel(unavailable)
+
+        assertNull(viewModel.state.value.selectedModelReference)
+        verify(exactly = 0) { settingsManager.selectedModelReference = any() }
+        verify(exactly = 0) { settingsManager.setModelReferenceForSession(any(), any()) }
+    }
     @Test
     fun `selectAgent with active session saves agent name per session`() = runTest {
         val viewModel = createViewModel()
@@ -1137,7 +1182,7 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `loadMessages uses per-session saved model index over message inference`() = runTest {
+    fun `loadMessages uses per-session saved model reference over message inference`() = runTest {
         val inferredPreset = ModelPresets.list[2]
         val messages = listOf(
             MessageWithParts(
@@ -1149,7 +1194,7 @@ class MainViewModelTest {
             )
         )
         coEvery { repository.getMessages("session-1", 30) } returns Result.success(messages)
-        every { settingsManager.getModelForSession("session-1") } returns 3
+        every { settingsManager.getModelReferenceForSession("session-1") } returns "kimi-for-coding/k3"
 
         val viewModel = createViewModel()
         updateState(viewModel) { it.copy(currentSessionId = "session-1") }
@@ -1157,7 +1202,7 @@ class MainViewModelTest {
         viewModel.loadMessages("session-1")
         advanceUntilIdle()
 
-        assertEquals(3, viewModel.state.value.selectedModelIndex)
+        assertEquals("kimi-for-coding/k3", viewModel.state.value.selectedModelReference)
     }
 
     @Test

@@ -501,9 +501,9 @@ iOS/Android feature parity 调研完成，确认以下体验层差异需要对�
 - 改动文件：`SettingsManager.kt`（新增 get/setDraftText）、`MainViewModel.kt`（selectSession 时保存/恢复）、`MainViewModelSessionActions.kt`
 
 **5.4 Model/Agent 按 Session 记忆**
-- 当前问题：全局 `selectedModelIndex` + 从 last message 推断，手动切模型后切走再切回会丢失
-- 目标：按 sessionID 存储选择到 EncryptedSharedPreferences（JSON Map），恢复优先级 per-session > 推断 > 全局默认
-- 改动文件：`SettingsManager.kt`（新增 get/setModelForSession）、`MainViewModel.kt`（selectModel/selectAgent 时写入）、`MainViewModelSessionActions.kt`（selectSession 时恢复）
+- 当前实现：模型选择以 `providerId/modelId` 引用而非 `selectedModelIndex` 保存，避免白名单重排或服务器切换导致静默改选模型。
+- 目标：按 sessionID 在 EncryptedSharedPreferences 中保存规范模型引用；恢复项仍须通过静态白名单和当前服务器模型交集验证，缺失时不伪造替代模型。
+- 改动文件：`SettingsManager.kt`（模型引用读写与 schema 2 迁移）、`ModelSelectionMigration.kt`、`MainViewModel.kt`（验证后写入）、`MainViewModelSessionActions.kt`（恢复与请求边界）。
 
 **文档更新**：PRD v1.1、RFC §4.3/§4.4/§5.4 已更新
 
@@ -518,7 +518,7 @@ iOS/Android feature parity 调研完成，确认以下体验层差异需要对�
 - `ChatScreen.kt`：新增 `onRenameSession` 回调，接入 `viewModel.updateSessionTitle()`
 - `SettingsManager.kt`：新增 6 个方法 + 3 个 key 常量
   - `getDraftText/setDraftText`：JSON Map 存储，空白文本自动移除
-  - `getModelForSession/setModelForSession`：JSON Map 存储 Int 索引
+  - `getModelReferenceForSession/setModelReferenceForSession`：JSON Map 存储 `providerId/modelId` 引用；旧整数下标经 schema 2 迁移后删除
   - `getAgentForSession/setAgentForSession`：JSON Map 存储 agent name
 - `MainViewModel.kt`：
   - `setInputText()`：同步保存草稿到 SettingsManager

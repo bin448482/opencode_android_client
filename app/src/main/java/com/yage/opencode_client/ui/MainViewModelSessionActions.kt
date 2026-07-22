@@ -178,20 +178,22 @@ internal fun launchLoadMessages(
             .onSuccess { messages ->
                 if (sessionId == state.value.currentSessionId) {
                     val lastAssistant = messages.lastOrNull { it.info.isAssistant }
-                    val inferredModelIndex = lastAssistant?.info?.resolvedModel?.let { model ->
-                        ModelPresets.list.indexOfFirst {
+                    val inferredModelReference = lastAssistant?.info?.resolvedModel?.let { model ->
+                        ModelPresets.list.firstOrNull {
                             it.providerId == model.providerId && it.modelId == model.modelId
-                        }.takeIf { it >= 0 }
+                        }?.let { ModelPresets.reference(it) }
                     }
                     val inferredAgentName = lastAssistant?.info?.agent
-                    val modelIndex = settingsManager?.getModelForSession(sessionId) ?: inferredModelIndex
+                    val persistedModelReference = settingsManager?.getModelReferenceForSession(sessionId)
+                        ?.takeIf { ModelPresets.findByReference(it) != null }
+                    val modelReference = persistedModelReference ?: inferredModelReference
                     val agentName = settingsManager?.getAgentForSession(sessionId) ?: inferredAgentName
                     state.update {
                         it.copy(
                             messages = messages,
                             messageLimit = limit,
                             isLoadingMessages = false,
-                            selectedModelIndex = modelIndex ?: it.selectedModelIndex,
+                            selectedModelReference = modelReference ?: it.selectedModelReference,
                             selectedAgentName = agentName ?: it.selectedAgentName
                         )
                     }
@@ -284,6 +286,7 @@ internal fun launchLoadProviders(
                 state.update { it.copy(providers = providers) }
             }
             .onFailure { error ->
+                state.update { it.copy(providers = null) }
                 onNonFatalError("Failed to load providers", error)
             }
     }
@@ -411,13 +414,8 @@ internal fun launchDeleteSession(
     }
 }
 
-internal fun buildSelectedModel(state: AppState): Message.ModelInfo? {
-    val selectedModel = state.availableModels.getOrNull(state.selectedModelIndex)
-    return selectedModel?.let {
-        Message.ModelInfo(it.providerId, it.modelId)
-    } ?: state.providers?.default?.let {
-        Message.ModelInfo(it.providerId, it.modelId)
-    }
+internal fun buildSelectedModel(state: AppState): Message.ModelInfo? = state.selectedModel?.let {
+    Message.ModelInfo(it.providerId, it.modelId)
 }
 
 internal fun launchSendMessage(

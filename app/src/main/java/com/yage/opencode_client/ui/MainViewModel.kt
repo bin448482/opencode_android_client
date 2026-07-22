@@ -58,7 +58,7 @@ data class AppState(
     val isLoadingMessages: Boolean = false,
     val agents: List<AgentInfo> = emptyList(),
     val selectedAgentName: String = "build",
-    val selectedModelIndex: Int = 2,
+    val selectedModelReference: String? = null,
     val providers: ProvidersResponse? = null,
     val pendingPermissions: List<PermissionRequest> = emptyList(),
     val pendingQuestions: List<QuestionRequest> = emptyList(),
@@ -186,9 +186,9 @@ data class AppState(
         val error: String? = null,
         val themeMode: ThemeMode = ThemeMode.SYSTEM,
         val languageMode: LanguageMode = LanguageMode.SYSTEM,
-        val selectedModelIndex: Int = 2,
+        val selectedModelReference: String? = null,
         val selectedAgentName: String = "build",
-        val availableModels: List<ModelOption> = ModelPresets.list,
+        val availableModels: List<ModelOption> = emptyList(),
         val contextUsage: ContextUsage? = null,
         val agents: List<AgentInfo> = emptyList(),
         val providers: ProvidersResponse? = null,
@@ -256,7 +256,7 @@ data class AppState(
             error = error,
             themeMode = themeMode,
             languageMode = languageMode,
-            selectedModelIndex = selectedModelIndex,
+            selectedModelReference = selectedModelReference,
             selectedAgentName = selectedAgentName,
             availableModels = availableModels,
             contextUsage = contextUsage,
@@ -280,13 +280,28 @@ data class AppState(
     val visibleAgents: List<AgentInfo>
         get() = agents.filter { it.isVisible }
 
-    /** Curated model list (filtered like iOS), not the full API response. */
+    /** Curated model list validated against the connected OpenCode Server. */
     val availableModels: List<ModelOption>
-        get() = ModelPresets.list
+        get() {
+            val serverProviders = providers?.providers ?: return emptyList()
+            return ModelPresets.list.filter { preset ->
+                serverProviders.any { provider ->
+                    provider.models.any { (modelKey, model) ->
+                        val providerMatches = provider.id == preset.providerId ||
+                            model.resolvedProviderId == preset.providerId
+                        val modelMatches = modelKey == preset.modelId || model.id == preset.modelId
+                        providerMatches && modelMatches
+                    }
+                }
+            }
+        }
+
+    val selectedModel: ModelOption?
+        get() = availableModels.firstOrNull { ModelPresets.reference(it) == selectedModelReference }
 
     val selectedAIUsageQuota: AIUsageQuota?
         get() {
-            val provider = when (availableModels.getOrNull(selectedModelIndex)?.providerId) {
+            val provider = when (selectedModel?.providerId) {
                 "openai" -> "codex"
                 "zai-coding-plan" -> "glm"
                 "ollama-cloud" -> "ollama"
@@ -808,7 +823,7 @@ class MainViewModel @Inject constructor(
         if (!force && now - lastHealthCheckTime < 30_000) return
         lastHealthCheckTime = now
         viewModelScope.launch {
-            _state.update { it.copy(isConnecting = true, error = null, connectionPhase = null) }
+            _state.update { it.copy(isConnecting = true, error = null, connectionPhase = null, providers = null) }
             val profile = hostProfileStore.currentProfile()
             if (!configureRepositoryForProfileAsync(profile)) return@launch
             repository.checkHealth()
@@ -1095,11 +1110,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun selectModel(index: Int) {
-        val clamped = index.coerceIn(0, ModelPresets.list.size - 1)
-        settingsManager.selectedModelIndex = clamped
-        _state.update { it.copy(selectedModelIndex = clamped) }
-        _state.value.currentSessionId?.let { settingsManager.setModelForSession(it, clamped) }
+    fun selectModel(model: AppState.ModelOption) {
+        val reference = ModelPresets.reference(model)
+        val selected = _state.value.availableModels.firstOrNull {
+            ModelPresets.reference(it) == reference
+        } ?: return
+        val selectedReference = ModelPresets.reference(selected)
+        settingsManager.selectedModelReference = selectedReference
+        _state.update { it.copy(selectedModelReference = selectedReference) }
+        _state.value.currentSessionId?.let {
+            settingsManager.setModelReferenceForSession(it, selectedReference)
+        }
     }
 
     fun setThemeMode(mode: ThemeMode) {

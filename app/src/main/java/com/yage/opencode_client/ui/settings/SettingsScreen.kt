@@ -55,6 +55,9 @@ import com.yage.opencode_client.ui.MainViewModel
 import com.yage.opencode_client.ui.AIUsageSettings
 import kotlinx.coroutines.delay
 
+private const val SHOW_SPEECH_SETTINGS = false
+private const val SHOW_EXPERIMENTAL_SETTINGS = false
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -189,82 +192,86 @@ fun SettingsScreen(
                 }
             )
 
-            SettingsSectionDivider()
+            if (SHOW_SPEECH_SETTINGS) {
+                SettingsSectionDivider()
 
-            SpeechRecognitionSection(
-                state = state,
-                aiBuilderBaseURL = aiBuilderBaseURL,
-                aiBuilderToken = aiBuilderToken,
-                aiBuilderCustomPrompt = aiBuilderCustomPrompt,
-                aiBuilderTerminology = aiBuilderTerminology,
-                showAIBuilderToken = showAIBuilderToken,
-                saveMessage = aiBuilderSaveMessage,
-                onBaseUrlChange = {
-                    aiBuilderBaseURL = it
-                    aiBuilderSaveMessage = null
-                },
-                onTokenChange = {
-                    aiBuilderToken = it
-                    aiBuilderSaveMessage = null
-                },
-                onPromptChange = {
-                    aiBuilderCustomPrompt = it
-                    aiBuilderSaveMessage = null
-                },
-                onTerminologyChange = {
-                    aiBuilderTerminology = it
-                    aiBuilderSaveMessage = null
-                },
-                onToggleTokenVisibility = { showAIBuilderToken = !showAIBuilderToken },
-                onTestConnection = {
-                    aiBuilderSaveMessage = null
-                    viewModel.saveAIBuilderSettings(
-                        buildAIBuilderSettings(
-                            baseURL = aiBuilderBaseURL,
-                            token = aiBuilderToken,
-                            customPrompt = aiBuilderCustomPrompt,
-                            terminology = aiBuilderTerminology
+                SpeechRecognitionSection(
+                    state = state,
+                    aiBuilderBaseURL = aiBuilderBaseURL,
+                    aiBuilderToken = aiBuilderToken,
+                    aiBuilderCustomPrompt = aiBuilderCustomPrompt,
+                    aiBuilderTerminology = aiBuilderTerminology,
+                    showAIBuilderToken = showAIBuilderToken,
+                    saveMessage = aiBuilderSaveMessage,
+                    onBaseUrlChange = {
+                        aiBuilderBaseURL = it
+                        aiBuilderSaveMessage = null
+                    },
+                    onTokenChange = {
+                        aiBuilderToken = it
+                        aiBuilderSaveMessage = null
+                    },
+                    onPromptChange = {
+                        aiBuilderCustomPrompt = it
+                        aiBuilderSaveMessage = null
+                    },
+                    onTerminologyChange = {
+                        aiBuilderTerminology = it
+                        aiBuilderSaveMessage = null
+                    },
+                    onToggleTokenVisibility = { showAIBuilderToken = !showAIBuilderToken },
+                    onTestConnection = {
+                        aiBuilderSaveMessage = null
+                        viewModel.saveAIBuilderSettings(
+                            buildAIBuilderSettings(
+                                baseURL = aiBuilderBaseURL,
+                                token = aiBuilderToken,
+                                customPrompt = aiBuilderCustomPrompt,
+                                terminology = aiBuilderTerminology
+                            )
                         )
-                    )
-                    viewModel.testAIBuilderConnection()
-                },
-                onSave = {
-                    viewModel.saveAIBuilderSettings(
-                        buildAIBuilderSettings(
-                            baseURL = aiBuilderBaseURL,
-                            token = aiBuilderToken,
-                            customPrompt = aiBuilderCustomPrompt,
-                            terminology = aiBuilderTerminology
+                        viewModel.testAIBuilderConnection()
+                    },
+                    onSave = {
+                        viewModel.saveAIBuilderSettings(
+                            buildAIBuilderSettings(
+                                baseURL = aiBuilderBaseURL,
+                                token = aiBuilderToken,
+                                customPrompt = aiBuilderCustomPrompt,
+                                terminology = aiBuilderTerminology
+                            )
                         )
-                    )
-                    aiBuilderSaveMessage = "Settings saved"
-                }
-            )
+                        aiBuilderSaveMessage = "Settings saved"
+                    }
+                )
+            }
 
-            SettingsSectionDivider()
+            if (SHOW_EXPERIMENTAL_SETTINGS) {
+                SettingsSectionDivider()
 
-            NfcExperimentalSection(
-                enabled = nfcEnabled,
-                prompt = nfcPrompt,
-                autoSend = nfcAutoSend,
-                onEnabledChange = {
-                    nfcEnabled = it
-                    viewModel.saveNfcEnabled(it)
-                },
-                onPromptChange = {
-                    nfcPrompt = it
-                    viewModel.saveNfcPrompt(it)
-                },
-                onAutoSendChange = {
-                    nfcAutoSend = it
-                    viewModel.saveNfcAutoSend(it)
-                },
-                onWriteToTag = {
-                    viewModel.saveNfcPrompt(nfcPrompt)
-                    viewModel.saveNfcAutoSend(nfcAutoSend)
-                    context.startActivity(Intent(context, NfcWriterActivity::class.java))
-                }
-            )
+                NfcExperimentalSection(
+                    enabled = nfcEnabled,
+                    prompt = nfcPrompt,
+                    autoSend = nfcAutoSend,
+                    onEnabledChange = {
+                        nfcEnabled = it
+                        viewModel.saveNfcEnabled(it)
+                    },
+                    onPromptChange = {
+                        nfcPrompt = it
+                        viewModel.saveNfcPrompt(it)
+                    },
+                    onAutoSendChange = {
+                        nfcAutoSend = it
+                        viewModel.saveNfcAutoSend(it)
+                    },
+                    onWriteToTag = {
+                        viewModel.saveNfcPrompt(nfcPrompt)
+                        viewModel.saveNfcAutoSend(nfcAutoSend)
+                        context.startActivity(Intent(context, NfcWriterActivity::class.java))
+                    }
+                )
+            }
 
             SettingsSectionDivider()
 

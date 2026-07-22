@@ -76,7 +76,7 @@ class AIUsageClient internal constructor(
     }
 
     private fun isPrivateHost(host: String): Boolean {
-        if (host == "localhost" || host == "0.0.0.0" || host.endsWith(".local") || host.endsWith(".ts.net")) return true
+        if (host == "localhost" || host == "0.0.0.0" || host == "::1" || host == "[::1]" || host.endsWith(".local") || host.endsWith(".ts.net")) return true
         if (host.startsWith("127.") || host.startsWith("10.") || host.startsWith("192.168.")) return true
         val parts = host.split('.')
         return parts.size == 4 && parts[0] == "172" && (parts[1].toIntOrNull() in 16..31)

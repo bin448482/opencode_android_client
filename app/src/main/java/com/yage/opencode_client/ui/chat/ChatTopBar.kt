@@ -59,6 +59,7 @@ import com.yage.opencode_client.data.model.Session
 import com.yage.opencode_client.data.model.SessionStatus
 import com.yage.opencode_client.data.model.TodoItem
 import com.yage.opencode_client.ui.AppState
+import com.yage.opencode_client.ui.ModelPresets
 import com.yage.opencode_client.ui.session.SessionList
 import com.yage.opencode_client.ui.theme.BrandGold
 import java.util.Locale
@@ -72,7 +73,7 @@ internal data class ChatTopBarState(
     val isRefreshingSessions: Boolean = false,
     val expandedSessionIds: Set<String> = emptySet(),
     val availableModels: List<AppState.ModelOption>,
-    val selectedModelIndex: Int,
+    val selectedModelReference: String?,
     val contextUsage: AppState.ContextUsage?,
     val sessionTodos: List<TodoItem> = emptyList(),
     val aiUsageEnabled: Boolean = false,
@@ -96,7 +97,7 @@ internal data class ChatTopBarActions(
     val onLoadMoreSessions: () -> Unit,
     val onRefreshSessions: () -> Unit = {},
     val onToggleSessionExpanded: (String) -> Unit = {},
-    val onSelectModel: (Int) -> Unit,
+    val onSelectModel: (AppState.ModelOption) -> Unit,
     val onOpenAIUsage: () -> Unit = {},
     val onRefreshAIUsage: () -> Unit = {},
     val onNavigateToSettings: () -> Unit = {},
@@ -113,6 +114,9 @@ internal fun ChatTopBar(
     val currentSession = state.sessions.find { it.id == state.currentSessionId }
     var showSessionSheet by remember { mutableStateOf(false) }
     var showModelMenu by remember { mutableStateOf(false) }
+    val selectedModel = state.availableModels.firstOrNull {
+        ModelPresets.reference(it) == state.selectedModelReference
+    }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showTodoDialog by remember { mutableStateOf(false) }
     var showContextDialog by remember { mutableStateOf(false) }
@@ -219,7 +223,7 @@ internal fun ChatTopBar(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = state.availableModels.getOrNull(state.selectedModelIndex)?.shortName ?: stringResource(R.string.chat_model_fallback),
+                                    text = selectedModel?.shortName ?: stringResource(R.string.chat_model_fallback),
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary,
@@ -248,19 +252,19 @@ internal fun ChatTopBar(
                                     onClick = { }
                                 )
                             }
-                            state.availableModels.forEachIndexed { index, model ->
+                            state.availableModels.forEach { model ->
                                 DropdownMenuItem(
                                     text = {
                                         Text(
                                             model.displayName,
-                                            color = if (index == state.selectedModelIndex)
+                                            color = if (model == selectedModel)
                                                 MaterialTheme.colorScheme.primary
                                             else
                                                 MaterialTheme.colorScheme.onSurface
                                         )
                                     },
                                     onClick = {
-                                        actions.onSelectModel(index)
+                                        actions.onSelectModel(model)
                                         showModelMenu = false
                                     }
                                 )

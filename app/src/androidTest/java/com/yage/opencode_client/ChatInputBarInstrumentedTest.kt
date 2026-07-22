@@ -1,6 +1,7 @@
 package com.yage.opencode_client
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -41,7 +42,8 @@ class ChatInputBarInstrumentedTest {
                     onAbortSpeech = {},
                     onRetrySpeech = {},
                     onDiscardSpeech = {},
-                    onToggleRecording = {}
+                    onToggleRecording = {},
+                    showVoiceInput = true
                 )
             }
         }
@@ -79,7 +81,8 @@ class ChatInputBarInstrumentedTest {
                     onAbortSpeech = {},
                     onRetrySpeech = {},
                     onDiscardSpeech = {},
-                    onToggleRecording = { speechClicks++ }
+                    onToggleRecording = { speechClicks++ },
+                    showVoiceInput = true
                 )
             }
         }
@@ -115,7 +118,8 @@ class ChatInputBarInstrumentedTest {
                     onAbortSpeech = {},
                     onRetrySpeech = {},
                     onDiscardSpeech = {},
-                    onToggleRecording = {}
+                    onToggleRecording = {},
+                    showVoiceInput = true
                 )
             }
         }
@@ -150,12 +154,47 @@ class ChatInputBarInstrumentedTest {
                     onAbortSpeech = {},
                     onRetrySpeech = {},
                     onDiscardSpeech = {},
-                    onToggleRecording = {}
+                    onToggleRecording = {},
+                    showVoiceInput = true
                 )
             }
         }
 
         composeRule.onNodeWithContentDescription("Retry this segment").assertIsEnabled()
         composeRule.onNodeWithText("Discard audio").assertIsDisplayed()
+    }
+    @Test
+    fun voiceUIIsHiddenByDefault() {
+        composeRule.setContent {
+            MaterialTheme {
+                ChatInputBar(
+                    text = "partial transcript",
+                    isBusy = true,
+                    agentActivityText = null,
+                    agentStartedAtMillis = null,
+                    isRecording = false,
+                    isTranscribing = true,
+                    hasPreservedSpeechAudio = false,
+                    isRetryingSpeech = false,
+                    speechAudioLevel = 0f,
+                    isSpeechConfigured = true,
+                    imageAttachments = emptyList(),
+                    onTextChange = {},
+                    onSend = {},
+                    onAddImages = {},
+                    onRemoveImage = {},
+                    onAbort = {},
+                    onAbortSpeech = {},
+                    onRetrySpeech = {},
+                    onDiscardSpeech = {},
+                    onToggleRecording = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Agent running").assertIsDisplayed()
+        composeRule.onNodeWithText("Agent running · Transcribing").assertDoesNotExist()
+        composeRule.onNodeWithText("Stop transcription wait").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Tap to speak").assertDoesNotExist()
     }
 }
