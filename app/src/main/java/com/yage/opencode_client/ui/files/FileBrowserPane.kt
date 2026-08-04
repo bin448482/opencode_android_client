@@ -1,6 +1,7 @@
 package com.yage.opencode_client.ui.files
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.yage.opencode_client.R
 import com.yage.opencode_client.data.model.FileNode
@@ -30,24 +32,28 @@ import com.yage.opencode_client.ui.theme.UntrackedFile
 internal fun FileBrowserPane(
     files: List<FileNode>,
     fileStatuses: Map<String, String>,
-    onFileSelected: (FileNode) -> Unit
+    onFileSelected: (FileNode) -> Unit,
+    onPathCopied: (String) -> Unit
 ) {
     LazyColumn(modifier = Modifier.fillMaxWidth()) {
         items(files, key = { it.path }) { file ->
             FileRow(
                 file = file,
                 status = fileStatuses[file.path],
-                onClick = { onFileSelected(file) }
+                onClick = { onFileSelected(file) },
+                onLongClick = { onPathCopied(file.path) }
             )
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun FileRow(
     file: FileNode,
     status: String?,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     val statusColor = when (status) {
         "added" -> AddedFile
@@ -59,7 +65,12 @@ internal fun FileRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .testTag("files.row.${file.path}")
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+                onLongClickLabel = stringResource(R.string.files_copy_path)
+            )
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

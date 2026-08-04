@@ -132,6 +132,8 @@
     <string name="permission_allow_once">Allow Once</string>
     <string name="permission_always_allow">Always Allow</string>
     <string name="files_title">Files</string>
+    <string name="files_copy_path">Copy path</string>
+    <string name="files_path_copied">Path copied</string>
     <string name="files_ignored">ignored</string>
     <string name="files_preview_mode">Preview mode</string>
     <string name="files_share">Share</string>

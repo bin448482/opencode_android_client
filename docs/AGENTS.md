@@ -12,6 +12,8 @@
 - `android_build_storage.md`：本机 Android 构建环境、APK 产物位置、构建缓存迁移结果与后续复用步骤；记录环境事实，不承载构建产物。
 - `opencode-server-start.md`：通过 Tailscale 启动受 Basic Auth 保护的 OpenCode Server 并连接 Android Client 的本机操作手册；不保存实际凭据。
 - `windows-tailscale-opencode-mobile-connection.md`：Windows 上通过 Tailscale MagicDNS 启动受 Basic Auth 保护的 OpenCode Server，并在 Android Client 创建 Direct Profile 的操作手册；不保存任何实际凭据。
+- `file-browser-copy-requirements.md`：文件浏览页复制目录和文件完整路径的需求、交互范围与验收标准。
+- `file-browser-copy-implementation-plan.md`：文件浏览路径复制的一次性实施步骤、风险与模拟器验收方案。
 - `test.md`、`skill_operate_emulator.md`、`skill_ui_test_tasks.md` 与 `ui_test_prompts/`：测试策略、模拟器操作约束和 UI 验收提示，不是生产源码。
 
 

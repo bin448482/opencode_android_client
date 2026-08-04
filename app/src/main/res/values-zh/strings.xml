@@ -132,6 +132,8 @@
     <string name="permission_allow_once">允许一次</string>
     <string name="permission_always_allow">始终允许</string>
     <string name="files_title">文件</string>
+    <string name="files_copy_path">复制路径</string>
+    <string name="files_path_copied">路径已复制</string>
     <string name="files_ignored">已忽略</string>
     <string name="files_preview_mode">预览模式</string>
     <string name="files_share">分享</string>
