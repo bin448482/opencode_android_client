@@ -1,5 +1,11 @@
 # OpenCode Android 客户端工作日志
 
+## 2026-09-11 — 服务端模型白名单
+
+- 保持聊天模型菜单由当前 OpenCode Server 的 `GET /config/providers` 驱动，不在 Android 端新增固定模型名单。
+- 使用 OpenCode provider 的 `whitelist` 配置限制返回目录；每个 provider 的白名单使用该 provider 内的模型 ID。客户端继续展示接口返回的全部有效项，并使用精确的 `providerId/modelId` 引用。
+- 修改服务器 `opencode.json` 并让 Server 重新加载后，手机重新连接或刷新即可获得新目录，无需重新安装 APK。
+
 ## 2026-07-22 — 服务端模型目录
 
 - 删除静态 `ModelPresets` 白名单；聊天模型菜单直接展示当前 OpenCode Server `GET /config/providers` 中的全部有效 provider/model 项。

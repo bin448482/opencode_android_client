@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OpenCode Client</string>
+    <string name="app_name">miidea agent</string>
     <string name="nav_chat">Chat</string>
     <string name="nav_files">Files</string>
     <string name="nav_settings">Settings</string>

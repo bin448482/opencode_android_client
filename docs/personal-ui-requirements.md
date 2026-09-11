@@ -69,7 +69,25 @@
 
 模型菜单不再来自客户端预设。客户端在连接当前 host profile 后读取 `GET /config/providers`，将每个 provider 的 `models` 映射扁平化为可选项：`providerID` / `providerId` 存在时优先使用，否则使用父 provider ID；`model.id` 为空时才使用 models map key。显示名称优先使用服务端 `name`，并始终显示精确 `providerId/modelId`。
 
-因此 GLM、Gemini、DeepSeek、GPT、Kimi 等都不再由 Android 代码按名称隐藏或添加。服务端返回的有效模型都会显示；服务端未返回或缺少有效请求标识的项不会被猜测或伪造。
+因此 GLM、Gemini、DeepSeek、GPT、Kimi 等都不再由 Android 代码按名称隐藏或添加。服务端返回的有效模型都会显示；服务端可通过 provider 的 `whitelist` / `blacklist` 在 `/config/providers` 生成前裁剪目录，服务端未返回或缺少有效请求标识的项不会被猜测或伪造。
+
+需要限制手机端可选模型时，在运行 OpenCode Server 的主机配置 `opencode.json` 的 `provider` 节点中设置白名单。例如：
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "kimi-for-coding": {
+      "whitelist": ["k3"]
+    },
+    "openai": {
+      "whitelist": ["gpt-5.2", "gpt-5.1"]
+    }
+  }
+}
+```
+
+`whitelist` 使用 provider 内的模型 ID，不是完整的 `provider/model` 引用。未设置白名单的 provider 仍会返回其全部有效模型；若要得到严格的全局限定，需要为会返回模型的 provider 分别配置白名单，或同时禁用不需要的 provider。服务端配置重新加载后，手机端重新连接/刷新模型目录即可，无需重新安装应用。
 
 菜单首项固定为“服务端默认（不指定模型）”。选择它会清除全局和当前会话的显式引用，使 `PromptRequest.model` 为 `null`，由 OpenCode Server 决定实际模型。`default` 响应字段允许多个 provider 默认值，客户端不将其中任一项硬编码为唯一全局默认。
 
@@ -100,7 +118,7 @@ private const val SHOW_VOICE_INPUT = false
 |------|---------|
 | Settings UI | 隐藏语音识别、NFC 实验功能两个区块 |
 | Chat Input UI | 隐藏 VoiceRail（麦克风、波形、转写状态） |
-| Model Selector | 展示当前 OpenCode Server 返回的完整有效模型目录和“服务端默认”项 |
+| Model Selector | 展示当前 OpenCode Server 经过服务端白名单裁剪后的有效模型目录和“服务端默认”项 |
 | 模型选择持久化 | 以 `providerId/modelId` 保存显式选择；默认项不保存引用 |
 | Tests | 覆盖目录扁平化、ID 别名/回退、失效引用和默认选择 |
 
@@ -113,7 +131,7 @@ private const val SHOW_VOICE_INPUT = false
 - [x] Settings 页面不显示“语音识别”区块。
 - [x] Settings 页面不显示“NFC Quick Prompt”区块。
 - [x] Chat 页面不显示 VoiceRail（麦克风、波形、转写状态）。
-- [x] 下拉列表显示服务端返回的全部有效模型，而不是个人白名单。
+- [x] 下拉列表显示服务端返回的全部有效模型；服务端 `provider.whitelist` 可在无需更新 App 的情况下限制目录。
 - [x] 菜单首项“服务端默认”会发送不含 `model` 的 Prompt。
 - [x] 预置列表移除后，历史会话不会因菜单重排被静默切换到其他模型。
 - [ ] 在实际 Android Server 上，确认目录与 `/config/providers` 一致，并选择服务端实际返回的模型发送非敏感消息。
@@ -122,7 +140,7 @@ private const val SHOW_VOICE_INPUT = false
 
 ## 5. 实施结果与服务端验收
 
-1. **已完成客户端改动**：文件内常量默认隐藏语音、NFC 和 VoiceRail；模型菜单按服务端目录动态生成，引用式选择和默认回退均有离线测试。
+1. **已完成客户端改动**：文件内常量默认隐藏语音、NFC 和 VoiceRail；模型菜单按服务端目录动态生成，引用式选择和默认回退均有离线测试。模型可见范围由 OpenCode Server 的目录响应决定，手机端不保存模型白名单。
 2. **已确认接口行为**：本机临时 OpenCode Server 的 `/config/providers` 返回 provider/models 目录与 provider 默认映射；`Pixel_6` 模拟器经 `adb reverse` 的真实 HTTP 测试确认，客户端目录的去重引用集合与该响应完全一致。这不是手机远端服务器的替代证明。
 3. **待完成服务端验收**：在 Android App 实际连接的 OpenCode Server 上确认下拉目录与接口响应一致。
 4. **待完成模拟器端到端验证**：仅在模拟器和显式指定的测试服务器上，选择“服务端默认”和实际目录模型各发送一条非敏感消息。
@@ -148,8 +166,8 @@ Android Client 的模型菜单直接由 `GET /config/providers` 动态生成。�
 
 因此：
 
-- `/config/providers` 是“当前 Android 要连接的服务端”的模型目录运行时权威。
-- `providers[].models` 中每个具备有效 `providerId/modelId` 的项都会显示；接口未返回或标识不完整的项不会显示。
+- `/config/providers` 是“当前 Android 要连接的服务端”的模型目录运行时权威；OpenCode Server 的 provider `whitelist` / `blacklist` 在此之前决定目录范围。
+- `providers[].models` 中每个具备有效 `providerId/modelId` 的返回项都会显示；接口未返回或标识不完整的项不会显示。
 - “服务端默认”不指定模型，`default` 映射仅说明各 provider 的默认项，不能被客户端推断为唯一全局默认。
 - `GET /provider` 可用于诊断 provider 总览，但不能替代 `/config/providers` 对当前服务端配置的确认。
 
@@ -165,6 +183,23 @@ OpenCode 支持 JSON/JSONC 配置，并按远端组织配置、全局配置、�
 ```
 
 `model` 的格式固定为 `provider_id/model_id`。认证凭据不应写入项目仓库或 Android 客户端；使用 OpenCode 的 provider 登录流程保存到本机认证存储。
+
+#### 服务端模型白名单
+
+OpenCode Server 支持在 provider 配置中使用 `whitelist` 限制模型选择器，只保留列出的 provider 内模型 ID：
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "kimi-for-coding": {
+      "whitelist": ["k3"]
+    }
+  }
+}
+```
+
+Android 不读取或缓存服务端配置文件，而是信任连接后收到的 `/config/providers` 目录；因此保存服务端配置并让 Server 重新加载后，重新连接或刷新客户端即可生效，不需要重新安装 Android 应用。
 
 ### A.3 运行时模型合同
 

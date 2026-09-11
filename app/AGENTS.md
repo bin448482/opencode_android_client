@@ -10,7 +10,7 @@
 
 ## 模型选择合同
 
-- `AppState.availableModels` 直接扁平化当前服务器 `GET /config/providers` 的有效 models 映射；不得按模型名称或个人预置进行隐藏、添加或猜测。请求 ID 优先取 model 的 `providerID/providerId` 与 `id`，为空才分别回退到父 provider ID 与 models map key。
+- `AppState.availableModels` 直接扁平化当前服务器 `GET /config/providers` 返回的有效 models 映射；OpenCode Server 可通过 provider 的 `whitelist` / `blacklist` 先裁剪目录，客户端不得按模型名称或个人预置再次隐藏、添加或猜测。请求 ID 优先取 model 的 `providerID/providerId` 与 `id`，为空才分别回退到父 provider ID 与 models map key。
 - 聊天菜单首项“服务端默认”表示 Prompt 不含 `model`；`default` 响应映射可含多个 provider 默认值，不能被移动端当作唯一全局默认。每个显式项显示服务端名称和规范 `providerId/modelId`。
 - 选择和会话偏好使用 `providerId/modelId` 规范引用。`SettingsManager` 在首次启动时将旧整数下标迁移至 schema 2 的原始引用，不能再按当前目录顺序解释旧值。
 - 若当前服务器不提供已保存的引用，提示请求不得伪造或改写另一模型；保存值保留，本次请求不带显式模型并显示“服务端默认”。
